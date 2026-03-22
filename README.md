@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔐 AI Vulnerability Scanner & Bug Bounty Tool
+# X
 
 [![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.0%2B-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
