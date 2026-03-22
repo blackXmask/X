@@ -273,40 +273,145 @@ This project is an **AI-powered web vulnerability scanner** developed as a **4th
 
 ---
 
-## Installation
+
+---
+
+## 📊 Dataset Schema
+
+The generated CSV contains **50+ engineered features** optimized for ML vulnerability detection models [^5^][^10^]:
+
+### 🆔 Identification & Metadata
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `scan_id` | string | Unique 12-char hash per test |
+| `timestamp` | ISO8601 | Test execution time |
+| `dataset_version` | string | Schema version (e.g., "1.0") |
+| `depth_level` | int | Crawler depth (0=seed) |
+
+### 🎯 Target Information
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `target_url` | string | Full tested URL |
+| `base_domain` | string | Extracted domain |
+| `endpoint_path` | string | URL path component |
+| `is_api_endpoint` | bool | Auto-detected REST/JSON API |
+
+### 📡 Request Details
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `http_method` | categorical | GET, POST, PUT |
+| `tested_parameter` | string | Parameter name tested |
+| `payload` | string | Raw payload sent |
+| `payload_type` | categorical | sqli, xss, command, path_traversal, ssrf, idor, xxe, ssti |
+| `payload_encoded` | string | URL-encoded payload |
+| `attack_vector` | categorical | url_param, body, client_side |
+
+### 📥 Response Metrics
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `response_status` | int | HTTP status code |
+| `response_time_ms` | float | Round-trip time (milliseconds) |
+| `response_size_bytes` | int | Content length |
+| `response_hash` | string | SHA256 prefix (content fingerprint) |
+| `content_type` | string | MIME type |
+
+### 🔒 Security Headers
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `header_x_frame` | string | X-Frame-Options value |
+| `header_csp` | string | Content-Security-Policy |
+| `header_hsts` | string | Strict-Transport-Security |
+| `header_x_content_type` | string | X-Content-Type-Options |
+| `header_xss_protection` | string | X-XSS-Protection |
+| `header_referrer` | string | Referrer-Policy |
+| `header_cors` | string | Access-Control-Allow-Origin |
+| `server_tech` | string | Server header fingerprint |
+| `secure_headers_present` | bool | Aggregate security score |
+
+### 🍪 Cookie Analysis
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `cookie_secure_flag` | bool | Secure attribute present |
+| `cookie_httponly_flag` | bool | HttpOnly attribute present |
+| `cookie_samesite` | categorical | none, lax, strict |
+| `cookie_count` | int | Number of cookies set |
+
+### 🚨 Vulnerability Detection (Target Variables)
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `vulnerability_detected` | bool | Ground truth label |
+| `vulnerability_type` | categorical | Specific vulnerability class |
+| `vulnerability_severity` | categorical | critical, high, medium, low, info |
+| `confidence_score` | float | 0.0-1.0 probability |
+| `evidence` | string | Detection reason/description |
+| `false_positive_risk` | categorical | low, medium, high |
+| `exploit_confirmed` | bool | High-confidence exploitable |
+
+### 🤖 ML Feature Vectors
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `text_features` | string | NLP-ready cleaned text (first 500 chars) |
+| `error_pattern_matches` | string | Detected error signatures |
+| `numeric_features_vector` | JSON | 12-dimensional numeric array |
+| `categorical_features_vector` | JSON | Encoded categorical values |
+| `semantic_structure_hash` | string | DOM structure fingerprint |
+| `payload_fingerprint` | string | Payload hash for deduplication |
+
+### 📈 Behavioral Analysis
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `payload_reflected` | bool | Payload appears in response |
+| `payload_transformed` | bool | Payload encoded/decoded in response |
+| `status_changed` | bool | Differs from baseline |
+| `content_changed` | bool | Hash differs from baseline |
+| `baseline_size_diff` | int | Byte difference from baseline |
+| `time_anomaly` | bool | Response time > threshold |
+
+### 🌐 Context Flags
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `requires_authentication` | bool | 401 response detected |
+| `is_redirect` | bool | 3xx status code |
+| `is_error_page` | bool | 4xx/5xx status |
+
+### 📝 Debug Data (Optional)
+| Column | Type | Description |
+|:---------|:-----|:------------|
+| `response_preview` | string | First 500 chars (sanitized) |
+| `request_headers` | string | Sent headers log |
+| `form_params_count` | int | Discovered form inputs |
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- pip package manager (>= 21.0)
-- Git
-- 4GB RAM minimum (8GB recommended for ML features)
+- Python 3.8+
+- Windows/Linux/macOS
+- Target URLs list (optional)
 
-### Step-by-Step Setup
+### Installation
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/blackXmask/X.git
-cd X
+
+# 1. Clone repository
+git clone https://github.com/blackXmask/vulnerability-data-collector.git
+cd vulnerability-data-collector
 
 # 2. Create virtual environment
 python -m venv venv
 
-# 3. Activate environment
-# Windows:
+# Activate (Windows)
 venv\Scripts\activate
-# macOS/Linux:
+# Activate (Linux/Mac)
 source venv/bin/activate
 
-# 4. Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+# 3. Install dependencies
+pip install aiohttp aiofiles beautifulsoup4
 
-# 5. Initialize database
-python manage.py init-db
+# 4. Create config.json (see Configuration section)
 
-# 6. Run application
-python run.py
 ```
 
 ### Docker Deployment (Optional)
