@@ -92,6 +92,7 @@ This project is an **AI-powered web vulnerability scanner** developed as a **4th
 ## System Architecture
 
 ```
+
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           PRESENTATION LAYER                                │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐       │
