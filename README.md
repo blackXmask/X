@@ -371,7 +371,7 @@ pip install aiohttp aiofiles beautifulsoup4
 
 ```
 
-### Docker Deployment (Optional)
+### Docker Deployment (Optional) 
 
 ```bash
 # Build image
@@ -396,22 +396,9 @@ docker run -p 5000:5000 ai-vuln-scanner
 4. **Review Results**: Analyze findings by severity and category
 5. **Export Report**: Download in PDF, CSV, or JSON format
 
-### Command Line Interface
 
-```bash
-# Quick scan
-python cli.py scan --url https://example.com --profile quick
 
-# Deep scan with AI
-python cli.py scan --url https://example.com --profile deep --ai-enabled
-
-# Batch scanning
-python cli.py batch --file urls.txt --output results.csv
-
-# Generate report
-python cli.py report --scan-id 123 --format pdf
 ```
-
 ### Configuration
 
 Edit `config.py` to customize:
@@ -515,35 +502,11 @@ Authorization: Bearer <token>
 }
 ```
 
----
 
 ## Contributing
 
 This project is developed for academic purposes. While direct contributions are limited, feedback and suggestions are welcome.
 
-### Development Workflow
-
-```bash
-# Fork repository
-# Create feature branch
-git checkout -b feature/your-feature-name
-
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest tests/ -v --cov=app
-
-# Format code
-black app/ tests/
-flake8 app/ tests/
-
-# Commit changes
-git commit -m "feat: add your feature description"
-
-# Push and create PR
-git push origin feature/your-feature-name
-```
 
 ### Code Standards
 
@@ -582,15 +545,15 @@ git push origin feature/your-feature-name
 
 - **Documentation**: Check `/docs` directory
 - **Issues**: GitHub Issues (academic inquiries only)
-- **Email**: [your-email@university.edu]
+- **Email**: 24pwcys***@uetpeshawar.com/blackxmask.official.com
 
 ---
 
 ## License
 
 ```
-Copyright (c) 2024 [Your Full Name]
-[Your University/Institution Name]
+Copyright (c) 2024 blackXmask-p7inc3
+UET Peshawar
 
 All Rights Reserved.
 
