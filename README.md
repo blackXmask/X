@@ -547,27 +547,6 @@ This project is developed for academic purposes. While direct contributions are 
 - **Issues**: GitHub Issues (academic inquiries only)
 - **Email**: 24pwcys***@uetpeshawar.com/blackxmask.official.com
 
----
-
-## License
-
-```
-Copyright (c) 2024 blackXmask-p7inc3
-UET Peshawar
-
-All Rights Reserved.
-
-This software is developed exclusively for academic purposes as part of a 
-4th Semester Final Year Project. 
-
-RESTRICTIONS:
-- No commercial use without explicit written permission
-- No redistribution in modified or unmodified form
-- No use in production security testing without proper authorization
-- Academic citations required for any public reference
-
-For licensing inquiries, contact: [your-email@university.edu]
-```
 
 ---
 
