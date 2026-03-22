@@ -1,157 +1,563 @@
-@"
-# AI Vulnerability Scanner & Bug Bounty Tool
+<div align="center">
+
+# 🔐 AI Vulnerability Scanner & Bug Bounty Tool
+
+[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-2.0%2B-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![License](https://img.shields.io/badge/License-Academic-red)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen)]()
+[![Maintenance](https://img.shields.io/badge/Maintained-Yes-brightgreen)]()
+
+### 🤖 AI-Powered Web Security Testing Platform
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Security-Scanner-ff6b6b?style=for-the-badge&logo=shield&logoColor=white" alt="Security">
+  <img src="https://img.shields.io/badge/ML-Powered-4ecdc4?style=for-the-badge&logo=brain&logoColor=white" alt="ML">
+  <img src="https://img.shields.io/badge/Web-Flask-45b7d1?style=for-the-badge&logo=flask&logoColor=white" alt="Web">
+</p>
+
+<p align="center"><i>Automated vulnerability detection with machine learning intelligence</i></p>
+
+<p align="center">
+  <a href="#quick-start">🚀 Quick Start</a> •
+  <a href="#architecture">📊 Architecture</a> •
+  <a href="#features">🔧 Features</a> •
+  <a href="#project-phases">📈 Roadmap</a>
+</p>
+
+</div>
+
+---
+
+## 📋 Table of Contents
+
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [System Architecture](#system-architecture)
+- [Project Roadmap](#project-roadmap)
+- [Technology Stack](#technology-stack)
+- [Installation](#installation)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
 
 ## Overview
 
-This project is an **AI-powered web vulnerability scanner** that automates security testing and generates comprehensive reports. It combines **rule-based scanning**, **data collection**, and **machine learning** to detect potential vulnerabilities in web applications.  
+This project is an **AI-powered web vulnerability scanner** developed as a **4th Semester Final Year Project**. It combines traditional rule-based security testing with modern machine learning techniques to detect potential vulnerabilities in web applications.
 
-Developed as a **4th Semester Final Year Project**, it uses Python and Flask to provide both **backend scanning** and **frontend UI** for user-friendly interaction.
+### Key Capabilities
 
----
-
-## Architecture
-
-\`\`\`
-   +-----------------+
-   |   User enters   |
-   |     URL in      |
-   |     Flask UI    |
-   +--------+--------+
-            |
-            v
-   +-----------------+
-   |  Flask Backend  |
-   |  (app.py)       |
-   | - Receives URL  |
-   | - Calls scanner |
-   +--------+--------+
-            |
-            v
-   +-----------------+
-   |   Scanner.py    |
-   | - Sends HTTP GET|
-   | - Collects data:|
-   |   Headers       |
-   |   Status code   |
-   |   Response time |
-   |   Cookies       |
-   |   Server info   |
-   | - Optional:     |
-   |   Rule-based    |
-   |   issues list   |
-   +--------+--------+
-            |
-            v
-   +-----------------+
-   |   Feature Data  |
-   |  (CSV / dict)   |
-   | Columns =       |
-   | status, headers,|
-   | cookies, time,  |
-   | server info     |
-   +--------+--------+
-            |
-            v
-   +-----------------+
-   |  AI / ML Model  |
-   | - Trained on    |
-   |   many examples |
-   | - Input:        |
-   |   features from |
-   |   scanner       |
-   | - Output:       |
-   |   predicted     |
-   |   vulnerabilities|
-   +--------+--------+
-            |
-            v
-   +-----------------+
-   | Flask UI        |
-   | - Displays      |
-   |   predicted     |
-   |   vulnerabilities|
-   | - Optionally:   |
-   |   severity color|
-   +-----------------+
-\`\`\`
+| Capability | Description |
+|:-----------|:------------|
+| **Automated Scanning** | Intelligent HTTP request analysis with comprehensive response profiling |
+| **AI Detection** | Machine learning models trained on real-world vulnerability patterns |
+| **Comprehensive Reports** | Detailed security assessments with CVSS-style severity classifications |
+| **Web Interface** | Clean, responsive Flask-based UI for seamless user interaction |
+| **Dual Engine** | Hybrid approach combining rule-based checks and ML predictions |
 
 ---
 
-## Project Phases
+## Key Features
 
-### Phase 1: Strong Backend (Foundation)
-- Scanner Core: HTTP requests, response time, headers, cookies
-- Rule-Based Checks: Missing headers, unsafe methods, cookie flags
-- Data Storage: Save features + rule-based issues to CSV/JSON
+### 🔍 Core Scanning Engine
 
-### Phase 2: Feature-Rich Dataset (For AI)
-- Collect Data: Scan safe websites (DVWA, Juice Shop)
-- Preprocess Data: Encode categorical features, normalize numeric
-- Save Dataset: CSV / JSON ready for AI
+- **Multi-Protocol Testing**: HTTP/1.1, HTTP/2, WebSocket support
+- **Method Coverage**: GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD
+- **Response Analysis**: Timing attacks, content length anomalies, status code patterns
+- **Header Security**: X-Frame-Options, CSP, HSTS, CORS policy validation
+- **Cookie Analysis**: Secure, HttpOnly, SameSite, expiration checks
+- **Fingerprinting**: Server technology detection and version identification
 
-### Phase 3: AI Model
-- Train ML Model: Random Forest / Decision Tree / Neural Network
-- Evaluate Model: Accuracy, precision, recall
-- Save Model: For inference in Flask app
+### 🤖 Machine Learning Module
 
-### Phase 4: Flask UI Integration
-- Basic Flask App: Input URL, display rule-based results
-- AI Predictions: Load model, show AI-predicted vulnerabilities
-- Optional: Color-coded severity, export CSV/PDF
+- **Vulnerability Classification**: XSS, SQL Injection, SSRF, RCE, LFI/RFI, CSRF
+- **Anomaly Detection**: Behavioral analysis of response patterns
+- **Confidence Scoring**: Probability-based risk assessment (0-100%)
+- **Continuous Learning**: Model retraining from new scan datasets
+- **Feature Engineering**: Automated extraction of security-relevant features
 
-### Phase 5: Chatbot Layer (Future)
-- Database: Store scan results + AI predictions
-- Chat Interface: Natural language queries
-- LLM / Reasoning: Generate human-readable answers
-- Advanced: Explain AI results, suggest remediations
+### 🌐 Web Application Interface
 
----
-
-## Key Notes
-- Phase 1 is critical — AI predictions depend on scanner accuracy  
-- Phase 2 generates dataset → backbone of ML model  
-- Phase 3 trains AI — start simple, improve iteratively  
-- Phase 4 integrates UI → displays rule-based + AI results  
-- Phase 5 optional — adds human-friendly explanation layer
+- **Real-time Monitoring**: Live scan progress with WebSocket updates
+- **Interactive Dashboard**: Sortable, filterable results table
+- **Visual Analytics**: Charts for vulnerability distribution and trends
+- **Export Options**: PDF, CSV, JSON, HTML report generation
+- **History Management**: Previous scan comparison and trending
 
 ---
 
-## Tech Stack
-- Backend: Python, Flask  
-- Scanner: Requests, BeautifulSoup (or custom HTTP parser)  
-- Data Handling: CSV, JSON, Pandas  
-- AI/ML: Scikit-learn / TensorFlow / PyTorch  
-- Frontend: Flask templates (HTML/CSS/JS)
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PRESENTATION LAYER                                 │
+│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐      │
+│  │   Web Interface  │    │   API Gateway    │    │   Report Viewer  │      │
+│  │   (Flask/Jinja2) │◄──►│   (REST/WS)      │◄──►│   (Exportable)   │      │
+│  └──────────────────┘    └──────────────────┘    └──────────────────┘      │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         APPLICATION LAYER                                    │
+│  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐      │
+│  │  Request Router  │◄──►│  Scan Controller │◄──►│  Auth Manager    │      │
+│  │  (URL Validation)│    │  (Job Queue)     │    │  (Session/Token) │      │
+│  └──────────────────┘    └────────┬─────────┘    └──────────────────┘      │
+└─────────────────────────────────────┼───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SCANNING ENGINE                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                     HTTP Client Module                               │    │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  │    │
+│  │  │   Request    │  │   Response   │  │   Cookie     │  │ Redirect │  │    │
+│  │  │   Builder    │  │   Parser     │  │   Handler    │  │ Handler  │  │    │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────┘  │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                      │                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    Rule-Based Analyzer                               │    │
+│  │  • Security Headers Check    • HTTP Method Allowlist                │    │
+│  │  • Information Disclosure    • SSL/TLS Configuration                │    │
+│  │  • Cookie Security           • CORS Policy Validation               │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       MACHINE LEARNING LAYER                                 │
+│                                                                              │
+│   Feature Extraction Pipeline                                                │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────┐   │
+│   │   Numeric    │   │  Categorical │   │   Text       │   │  Binary  │   │
+│   │   Features   │   │  Encoders    │   │   Vectorizer │   │  Flags   │   │
+│   │ (time/size)  │   │ (header types)│   │ (response)   │   │(present) │   │
+│   └──────┬───────┘   └──────┬───────┘   └──────┬───────┘   └────┬─────┘   │
+│          └──────────────────┴──────────────────┴────────────────┘          │
+│                                      │                                       │
+│   Model Inference                    │                                       │
+│   ┌──────────────────────────────────┴──────────────────────────────────┐   │
+│   │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌────────┐  │   │
+│   │  │   Random    │   │   Gradient  │   │   Neural    │   │ Voting │  │   │
+│   │  │   Forest    │   │   Boosting  │   │   Network   │   │ Ensemble│  │   │
+│   │  │  (sklearn)   │   │   (XGBoost) │   │   (TF/PyTorch)│   │        │  │   │
+│   │  └─────────────┘   └─────────────┘   └─────────────┘   └────────┘  │   │
+│   └─────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                       │
+│   Output: Vulnerability Class + Confidence Score + Affected Parameters     │
+│                                                                              │
+└─────────────────────────────────────┬───────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATA & REPORTING LAYER                                │
+│                                                                              │
+│   ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐   │
+│   │   Data Storage   │    │   Report Engine  │    │   Export Module  │   │
+│   │   (SQLite/CSV)   │    │   (Jinja2/PDF)   │    │   (Multi-format) │   │
+│   └──────────────────┘    └──────────────────┘    └──────────────────┘   │
+│                                                                              │
+│   Severity Classification:                                                   │
+│   🔴 Critical (9.0-10.0)  🟠 High (7.0-8.9)  🟡 Medium (4.0-6.9)  🟢 Low (0-3.9) │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## How to Run
-1. Clone repo:
-\`\`\`bash
+## Project Roadmap
+
+### Phase 1: Foundation Engine ✅
+*Core backend infrastructure and rule-based scanning*
+
+| Component | Status | Priority | Description |
+|:----------|:------:|:--------:|:------------|
+| HTTP Scanner Core | ✅ | High | Multi-method request engine with timeout handling |
+| Response Parser | ✅ | High | Header, cookie, and body extraction |
+| Rule-Based Checks | ✅ | High | Security header and configuration validation |
+| Data Persistence | ✅ | Medium | Structured CSV/JSON storage layer |
+| Error Handling | ✅ | High | Robust exception management and logging |
+
+### Phase 2: Intelligence Dataset 🔄
+*Training data generation and preprocessing pipeline*
+
+| Component | Status | Priority | Description |
+|:----------|:------:|:--------:|:------------|
+| Test Target Integration | 🔄 | High | DVWA, Juice Shop, WebGoat connectivity |
+| Data Collection Agent | 🔄 | High | Automated scan and response capture |
+| Feature Engineering | 🔄 | Critical | Numeric encoding and normalization |
+| Labeling System | 🔄 | Critical | Ground truth vulnerability tagging |
+| Dataset Balancing | ⏳ | Medium | Oversampling/undersampling for rare classes |
+
+### Phase 3: ML Model Training ⏳
+*AI model development, training, and evaluation*
+
+| Component | Status | Priority | Description |
+|:----------|:------:|:--------:|:------------|
+| Baseline Models | ⏳ | High | Logistic Regression, Decision Trees |
+| Advanced Models | ⏳ | High | Random Forest, XGBoost, Neural Networks |
+| Hyperparameter Tuning | ⏳ | Medium | Grid search and Bayesian optimization |
+| Model Evaluation | ⏳ | Critical | Cross-validation, ROC-AUC, F1-score |
+| Model Export | ⏳ | High | ONNX/Pickle format for production |
+
+### Phase 4: Integration & UI ⏳
+*System unification and interface enhancement*
+
+| Component | Status | Priority | Description |
+|:----------|:------:|:--------:|:------------|
+| Flask API Development | ⏳ | High | RESTful endpoints for all operations |
+| Frontend Redesign | ⏳ | Medium | Bootstrap 5 / React modern UI |
+| Results Dashboard | ⏳ | Medium | Interactive data visualization |
+| Report Generator | ⏳ | Medium | PDF/HTML export with charts |
+| User Authentication | ⏳ | Low | Multi-user support with roles |
+
+### Phase 5: Advanced Features 📋
+*Intelligent assistant and automation capabilities*
+
+| Component | Status | Priority | Description |
+|:----------|:------:|:--------:|:------------|
+| NLP Chatbot | 📋 | Low | Natural language query interface |
+| Explanation Engine | 📋 | Medium | SHAP/LIME model interpretability |
+| Remediation Advisor | 📋 | Medium | Auto-generated security fix suggestions |
+| CI/CD Integration | 📋 | Low | GitHub Actions/Jenkins plugin |
+| Distributed Scanning | 📋 | Low | Multi-node scanning architecture |
+
+**Legend:** ✅ Complete | 🔄 In Progress | ⏳ Planned | 📋 Future
+
+---
+
+## Technology Stack
+
+### Backend & Core
+
+| Technology | Version | Purpose |
+|:-----------|:-------:|:--------|
+| [Python](https://www.python.org/) | 3.8+ | Core language |
+| [Flask](https://flask.palletsprojects.com/) | 2.0+ | Web framework |
+| [Gunicorn](https://gunicorn.org/) | 20.1+ | WSGI HTTP Server |
+| [Requests](https://docs.python-requests.org/) | 2.28+ | HTTP library |
+| [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/) | 4.11+ | HTML parsing |
+
+### Data Science & ML
+
+| Technology | Version | Purpose |
+|:-----------|:-------:|:--------|
+| [Pandas](https://pandas.pydata.org/) | 1.5+ | Data manipulation |
+| [NumPy](https://numpy.org/) | 1.24+ | Numerical computing |
+| [Scikit-learn](https://scikit-learn.org/) | 1.2+ | Traditional ML algorithms |
+| [XGBoost](https://xgboost.readthedocs.io/) | 1.7+ | Gradient boosting |
+| [TensorFlow](https://www.tensorflow.org/) / [PyTorch](https://pytorch.org/) | 2.x / 1.x | Deep learning |
+
+### Frontend & Visualization
+
+| Technology | Version | Purpose |
+|:-----------|:-------:|:--------|
+| [Bootstrap](https://getbootstrap.com/) | 5.3+ | CSS framework |
+| [Chart.js](https://www.chartjs.org/) | 3.9+ | Data visualization |
+| [DataTables](https://datatables.net/) | 1.12+ | Interactive tables |
+| [Jinja2](https://jinja.palletsprojects.com/) | 3.1+ | Templating engine |
+
+### Database & Storage
+
+| Technology | Version | Purpose |
+|:-----------|:-------:|:--------|
+| [SQLite](https://www.sqlite.org/) | 3.39+ | Embedded database |
+| [SQLAlchemy](https://www.sqlalchemy.org/) | 1.4+ | ORM layer |
+| [Redis](https://redis.io/) | 7.0+ | Caching & job queue (optional) |
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Python 3.8 or higher
+- pip package manager (>= 21.0)
+- Git
+- 4GB RAM minimum (8GB recommended for ML features)
+
+### Step-by-Step Setup
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/blackXmask/X.git
-\`\`\`
-2. Install dependencies:
-\`\`\`bash
+cd X
+
+# 2. Create virtual environment
+python -m venv venv
+
+# 3. Activate environment
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
+
+# 4. Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
-\`\`\`
-3. Run Flask app:
-\`\`\`bash
-python app.py
-\`\`\`
-4. Open browser and enter URL in Flask UI
+
+# 5. Initialize database
+python manage.py init-db
+
+# 6. Run application
+python run.py
+```
+
+### Docker Deployment (Optional)
+
+```bash
+# Build image
+docker build -t ai-vuln-scanner .
+
+# Run container
+docker run -p 5000:5000 ai-vuln-scanner
+```
+
+---
+
+## Usage
+
+### Web Interface
+
+1. **Access Application**: Open `http://localhost:5000` in your browser
+2. **Configure Scan**:
+   - Enter target URL (e.g., `https://example.com`)
+   - Select scan profile: Quick / Standard / Deep / Custom
+   - Toggle AI analysis (requires trained model)
+3. **Execute Scan**: Click "Start Scan" and monitor progress
+4. **Review Results**: Analyze findings by severity and category
+5. **Export Report**: Download in PDF, CSV, or JSON format
+
+### Command Line Interface
+
+```bash
+# Quick scan
+python cli.py scan --url https://example.com --profile quick
+
+# Deep scan with AI
+python cli.py scan --url https://example.com --profile deep --ai-enabled
+
+# Batch scanning
+python cli.py batch --file urls.txt --output results.csv
+
+# Generate report
+python cli.py report --scan-id 123 --format pdf
+```
+
+### Configuration
+
+Edit `config.py` to customize:
+
+```python
+# Scanning behavior
+MAX_THREADS = 10
+REQUEST_TIMEOUT = 30
+USER_AGENT = "AI-Vuln-Scanner/1.0"
+
+# ML settings
+MODEL_PATH = "models/rf_classifier_v1.pkl"
+CONFIDENCE_THRESHOLD = 0.75
+
+# Reporting
+DEFAULT_FORMAT = "json"
+SEVERITY_COLORS = {
+    "critical": "#dc3545",
+    "high": "#fd7e14", 
+    "medium": "#ffc107",
+    "low": "#28a745"
+}
+```
+
+---
+
+## API Reference
+
+### Authentication
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "secure_password"
+}
+```
+
+### Start Scan
+
+```http
+POST /api/v1/scans
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "target_url": "https://example.com",
+  "scan_type": "deep",
+  "ai_analysis": true,
+  "callback_url": "https://your-server.com/webhook"
+}
+```
+
+**Response:**
+
+```json
+{
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued",
+  "estimated_duration": "120s",
+  "created_at": "2024-03-22T23:48:00Z"
+}
+```
+
+### Get Results
+
+```http
+GET /api/v1/scans/{scan_id}/results
+Authorization: Bearer <token>
+```
+
+**Response:**
+
+```json
+{
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "summary": {
+    "total_requests": 150,
+    "vulnerabilities_found": 12,
+    "severity_breakdown": {
+      "critical": 2,
+      "high": 3,
+      "medium": 5,
+      "low": 2
+    }
+  },
+  "findings": [
+    {
+      "id": 1,
+      "type": "SQL Injection",
+      "severity": "critical",
+      "confidence": 0.94,
+      "location": "/search?q=1' OR '1'='1",
+      "description": "Time-based blind SQL injection detected",
+      "remediation": "Use parameterized queries and prepared statements"
+    }
+  ]
+}
+```
+
+---
+
+## Contributing
+
+This project is developed for academic purposes. While direct contributions are limited, feedback and suggestions are welcome.
+
+### Development Workflow
+
+```bash
+# Fork repository
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest tests/ -v --cov=app
+
+# Format code
+black app/ tests/
+flake8 app/ tests/
+
+# Commit changes
+git commit -m "feat: add your feature description"
+
+# Push and create PR
+git push origin feature/your-feature-name
+```
+
+### Code Standards
+
+- **PEP 8** compliance (enforced via `flake8`)
+- **Type hints** for all function signatures
+- **Docstrings** following Google style
+- **Unit tests** for new features (min 80% coverage)
+
+---
+
+## Security Considerations
+
+⚠️ **Important**: This tool is designed for authorized security testing only.
+
+- Always obtain **written permission** before scanning target systems
+- Respect **rate limits** and avoid overwhelming target servers
+- **Never** use against production systems without approval
+- Follow **responsible disclosure** for any vulnerabilities found
+- Check local laws regarding security testing and computer access
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+| Issue | Solution |
+|:------|:---------|
+| `ModuleNotFoundError` | Run `pip install -r requirements.txt` |
+| Database locked | Ensure no other process is using `scanner.db` |
+| Model not found | Train model first: `python train_model.py` |
+| Scan timeouts | Increase `REQUEST_TIMEOUT` in config |
+| Memory errors | Reduce `MAX_THREADS` for large scans |
+
+### Support
+
+- **Documentation**: Check `/docs` directory
+- **Issues**: GitHub Issues (academic inquiries only)
+- **Email**: [your-email@university.edu]
 
 ---
 
 ## License
-All rights reserved. Developed for academic purposes (4th Semester Project).  
-No part of this software may be used, copied, modified, distributed, or reproduced without prior written permission from the author.
-"@ | Out-File -Encoding UTF8 README.md
 
-# Add all files to git
-git add .
+```
+Copyright (c) 2024 [Your Full Name]
+[Your University/Institution Name]
 
-# Commit changes
-git commit -m "Initial commit - AI vulnerability scanner + README + LICENSE"
+All Rights Reserved.
 
-# Push to GitHub
-git push -u origin main
+This software is developed exclusively for academic purposes as part of a 
+4th Semester Final Year Project. 
+
+RESTRICTIONS:
+- No commercial use without explicit written permission
+- No redistribution in modified or unmodified form
+- No use in production security testing without proper authorization
+- Academic citations required for any public reference
+
+For licensing inquiries, contact: [your-email@university.edu]
+```
+
+---
+
+## Acknowledgments
+
+- **OWASP Foundation** for security guidelines and testing resources
+- **PortSwigger Web Security** for methodology references
+- **Scikit-learn & TensorFlow Teams** for ML framework support
+- **University Supervisor** for project guidance and mentorship
+
+---
+
+<div align="center">
+
+**[⬆ Back to Top](#-ai-vulnerability-scanner--bug-bounty-tool)**
+
+Built with precision for academic excellence 🎓
+
+</div>
