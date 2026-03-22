@@ -230,49 +230,6 @@ This project is an **AI-powered web vulnerability scanner** developed as a **4th
 
 **Legend:** ✅ Complete | 🔄 In Progress | ⏳ Planned | 📋 Future
 
----
-
-## Technology Stack
-
-### Backend & Core
-
-| Technology | Version | Purpose |
-|:-----------|:-------:|:--------|
-| [Python](https://www.python.org/) | 3.8+ | Core language |
-| [Flask](https://flask.palletsprojects.com/) | 2.0+ | Web framework |
-| [Gunicorn](https://gunicorn.org/) | 20.1+ | WSGI HTTP Server |
-| [Requests](https://docs.python-requests.org/) | 2.28+ | HTTP library |
-| [BeautifulSoup4](https://www.crummy.com/software/BeautifulSoup/) | 4.11+ | HTML parsing |
-
-### Data Science & ML
-
-| Technology | Version | Purpose |
-|:-----------|:-------:|:--------|
-| [Pandas](https://pandas.pydata.org/) | 1.5+ | Data manipulation |
-| [NumPy](https://numpy.org/) | 1.24+ | Numerical computing |
-| [Scikit-learn](https://scikit-learn.org/) | 1.2+ | Traditional ML algorithms |
-| [XGBoost](https://xgboost.readthedocs.io/) | 1.7+ | Gradient boosting |
-| [TensorFlow](https://www.tensorflow.org/) / [PyTorch](https://pytorch.org/) | 2.x / 1.x | Deep learning |
-
-### Frontend & Visualization
-
-| Technology | Version | Purpose |
-|:-----------|:-------:|:--------|
-| [Bootstrap](https://getbootstrap.com/) | 5.3+ | CSS framework |
-| [Chart.js](https://www.chartjs.org/) | 3.9+ | Data visualization |
-| [DataTables](https://datatables.net/) | 1.12+ | Interactive tables |
-| [Jinja2](https://jinja.palletsprojects.com/) | 3.1+ | Templating engine |
-
-### Database & Storage
-
-| Technology | Version | Purpose |
-|:-----------|:-------:|:--------|
-| [SQLite](https://www.sqlite.org/) | 3.39+ | Embedded database |
-| [SQLAlchemy](https://www.sqlalchemy.org/) | 1.4+ | ORM layer |
-| [Redis](https://redis.io/) | 7.0+ | Caching & job queue (optional) |
-
----
-
 
 ---
 
