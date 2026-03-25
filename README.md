@@ -2,9 +2,9 @@
 
 # X
 ### AI-Powered Web Security Testing Platform
-[![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![XGBoost](https://img.shields.io/badge/XGBoost-000000?logo=xgboost&logoColor=white)](https://xgboost.ai/)
-[![License](https://img.shields.io/badge/License-Academic-red)](LICENSE)
+[![License](https://img.shields.io/badge/License-red)](LICENSE)
 
 
 <p align="center"><i>Vulnerability detection with machine learning intelligence</i></p>
