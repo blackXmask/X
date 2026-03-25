@@ -19,9 +19,6 @@
 - [Key Features](#key-features)
 - [System Architecture](#system-architecture)
 - [Project Roadmap](#project-roadmap)
-- [Installation](#installation)
-- [Usage](#usage)
-- [API Reference](#api-reference)
 - [Contributing](#contributing)
 
 
@@ -29,46 +26,55 @@
 
 ## Overview
 
-This project is an **AI-powered web vulnerability scanner** developed as a **4th Semester Final Year Project**. It combines traditional rule-based security testing with modern machine learning techniques to detect potential vulnerabilities in web applications.
+Our system improves traditional web vulnerability detection by integrating an XGBoost model that learns patterns in malicious inputs, reducing false positives and improving detection accuracy. The platform is named **Platform X**, reflecting its advanced, intelligent approach to web application security.
+
+---
 
 ### Key Capabilities
 
-| Capability | Description |
-|:-----------|:------------|
-| **Automated Scanning** | Intelligent HTTP request analysis with comprehensive response profiling |
-| **AI Detection** | Machine learning models trained on real-world vulnerability patterns |
-| **Comprehensive Reports** | Detailed security assessments with CVSS-style severity classifications |
-| **Web Interface** | Clean, responsive Flask-based UI for seamless user interaction |
-| **Dual Engine** | Hybrid approach combining rule-based checks and ML predictions |
+| Capability                  | Description                                                                                                        |
+| :-------------------------- | :----------------------------------------------------------------------------------------------------------------- |
+| **Automated Analysis**      | Advanced HTTP request inspection with in-depth response behavior profiling                                         |
+| **AI-Powered Detection**    | XGBoost-based model trained on real-world vulnerability patterns for accurate threat identification                |
+| **Comprehensive Reporting** | Detailed security insights with CVSS-inspired severity classification and actionable findings                      |
+| **Web-Based Interface**     | Intuitive and responsive Flask-powered UI for efficient interaction and visualization                              |
+| **Hybrid Detection Engine** | Combines rule-based techniques with machine learning predictions for enhanced accuracy and reduced false positives |
+
+
 
 ---
 
 ## Key Features
 
-### 🔍 Core Scanning Engine
+### 🔍 Core Detection Engine
 
-- **Multi-Protocol Testing**: HTTP/1.1, HTTP/2, WebSocket support
-- **Method Coverage**: GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD
-- **Response Analysis**: Timing attacks, content length anomalies, status code patterns
-- **Header Security**: X-Frame-Options, CSP, HSTS, CORS policy validation
-- **Cookie Analysis**: Secure, HttpOnly, SameSite, expiration checks
-- **Fingerprinting**: Server technology detection and version identification
+* **Multi-Protocol Support**: Handles HTTP/1.1, HTTP/2, and WebSocket communication
+* **Comprehensive Method Coverage**: Supports GET, POST, PUT, DELETE, OPTIONS, PATCH, and HEAD requests
+* **Advanced Response Analysis**: Detects timing anomalies, content inconsistencies, and status code irregularities
+* **Security Header Evaluation**: Validates configurations like CSP, HSTS, X-Frame-Options, and CORS policies
+* **Cookie Security Analysis**: Assesses Secure, HttpOnly, SameSite attributes, and expiration policies
+* **Technology Fingerprinting**: Identifies server technologies and potential version exposures
+
+---
 
 ### 🤖 Machine Learning Module
 
-- **Vulnerability Classification**: XSS, SQL Injection, SSRF, RCE, LFI/RFI, CSRF
-- **Anomaly Detection**: Behavioral analysis of response patterns
-- **Confidence Scoring**: Probability-based risk assessment (0-100%)
-- **Continuous Learning**: Model retraining from new scan datasets
-- **Feature Engineering**: Automated extraction of security-relevant features
+* **Intelligent Vulnerability Classification**: Detects threats such as XSS, SQL Injection, SSRF, RCE, LFI/RFI, and CSRF
+* **Behavioral Anomaly Detection**: Learns and identifies unusual response patterns beyond static rules
+* **Confidence-Based Scoring**: Assigns probability-driven risk scores (0–100%) for each finding
+* **Adaptive Learning**: Supports model retraining using newly generated scan data
+* **Automated Feature Engineering**: Extracts and processes security-relevant features for improved model performance
+
+---
 
 ### 🌐 Web Application Interface
 
-- **Real-time Monitoring**: Live scan progress with WebSocket updates
-- **Interactive Dashboard**: Sortable, filterable results table
-- **Visual Analytics**: Charts for vulnerability distribution and trends
-- **Export Options**: PDF, CSV, JSON, HTML report generation
-- **History Management**: Previous scan comparison and trending
+* **Real-Time Monitoring**: Live scan updates using WebSocket-based communication
+* **Interactive Dashboard**: Dynamic, filterable, and sortable results for efficient analysis
+* **Visual Analytics**: Graphical representation of vulnerability trends and distribution
+* **Flexible Export Options**: Generate reports in PDF, CSV, JSON, and HTML formats
+* **Scan History Management**: Enables comparison of previous scans and trend analysis over time
+
 
 ---
 
@@ -323,169 +329,6 @@ The generated CSV contains **50+ engineered features** optimized for ML vulnerab
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.8+
-- Windows/Linux/macOS
-- Target URLs list (optional)
-
-### Installation
-
-```bash
-
-# 1. Clone repository
-git clone https://github.com/blackXmask/vulnerability-data-collector.git
-cd vulnerability-data-collector
-
-# 2. Create virtual environment
-python -m venv venv
-
-# Activate (Windows)
-venv\Scripts\activate
-# Activate (Linux/Mac)
-source venv/bin/activate
-
-# 3. Install dependencies
-pip install aiohttp aiofiles beautifulsoup4
-
-# 4. Create config.json (see Configuration section)
-
-```
-
-### Docker Deployment (Optional) 
-
-```bash
-# Build image
-docker build -t ai-vuln-scanner .
-
-# Run container
-docker run -p 5000:5000 ai-vuln-scanner
-```
-
----
-
-## Usage
-
-### Web Interface
-
-1. **Access Application**: Open `http://localhost:5000` in your browser
-2. **Configure Scan**:
-   - Enter target URL (e.g., `https://example.com`)
-   - Select scan profile: Quick / Standard / Deep / Custom
-   - Toggle AI analysis (requires trained model)
-3. **Execute Scan**: Click "Start Scan" and monitor progress
-4. **Review Results**: Analyze findings by severity and category
-5. **Export Report**: Download in PDF, CSV, or JSON format
-
-
-
-```
-### Configuration
-
-Edit `config.py` to customize:
-
-```python
-# Scanning behavior
-MAX_THREADS = 10
-REQUEST_TIMEOUT = 30
-USER_AGENT = "AI-Vuln-Scanner/1.0"
-
-# ML settings
-MODEL_PATH = "models/rf_classifier_v1.pkl"
-CONFIDENCE_THRESHOLD = 0.75
-
-# Reporting
-DEFAULT_FORMAT = "json"
-SEVERITY_COLORS = {
-    "critical": "#dc3545",
-    "high": "#fd7e14", 
-    "medium": "#ffc107",
-    "low": "#28a745"
-}
-```
-
----
-
-## API Reference
-
-### Authentication
-
-```http
-POST /api/v1/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "secure_password"
-}
-```
-
-### Start Scan
-
-```http
-POST /api/v1/scans
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "target_url": "https://example.com",
-  "scan_type": "deep",
-  "ai_analysis": true,
-  "callback_url": "https://your-server.com/webhook"
-}
-```
-
-**Response:**
-
-```json
-{
-  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "estimated_duration": "120s",
-  "created_at": "2024-03-22T23:48:00Z"
-}
-```
-
-### Get Results
-
-```http
-GET /api/v1/scans/{scan_id}/results
-Authorization: Bearer <token>
-```
-
-**Response:**
-
-```json
-{
-  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "summary": {
-    "total_requests": 150,
-    "vulnerabilities_found": 12,
-    "severity_breakdown": {
-      "critical": 2,
-      "high": 3,
-      "medium": 5,
-      "low": 2
-    }
-  },
-  "findings": [
-    {
-      "id": 1,
-      "type": "SQL Injection",
-      "severity": "critical",
-      "confidence": 0.94,
-      "location": "/search?q=1' OR '1'='1",
-      "description": "Time-based blind SQL injection detected",
-      "remediation": "Use parameterized queries and prepared statements"
-    }
-  ]
-}
-```
-
-
 ## Contributing
 
 This project is developed for academic purposes. While direct contributions are limited, feedback and suggestions are welcome.
@@ -526,7 +369,6 @@ This project is developed for academic purposes. While direct contributions are 
 
 ### Support
 
-- **Documentation**: Check `/docs` directory
 - **Issues**: GitHub Issues (academic inquiries only)
 - **Email**: 24pwcys***@uetpeshawar.com/blackxmask.official.com
 
