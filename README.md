@@ -1,29 +1,13 @@
 <div align="center">
 
 # X
-
+### AI-Powered Web Security Testing Platform
 [![Python](https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-2.0%2B-000000?logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-000000?logo=xgboost&logoColor=white)](https://xgboost.ai/)
 [![License](https://img.shields.io/badge/License-Academic-red)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen)]()
-[![Maintenance](https://img.shields.io/badge/Maintained-Yes-brightgreen)]()
 
-### 🤖 AI-Powered Web Security Testing Platform
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Security-Scanner-ff6b6b?style=for-the-badge&logo=shield&logoColor=white" alt="Security">
-  <img src="https://img.shields.io/badge/ML-Powered-4ecdc4?style=for-the-badge&logo=brain&logoColor=white" alt="ML">
-  <img src="https://img.shields.io/badge/Web-Flask-45b7d1?style=for-the-badge&logo=flask&logoColor=white" alt="Web">
-</p>
-
-<p align="center"><i>Automated vulnerability detection with machine learning intelligence</i></p>
-
-<p align="center">
-  <a href="#quick-start">🚀 Quick Start</a> •
-  <a href="#architecture">📊 Architecture</a> •
-  <a href="#features">🔧 Features</a> •
-  <a href="#project-phases">📈 Roadmap</a>
-</p>
+<p align="center"><i>Vulnerability detection with machine learning intelligence</i></p>
 
 </div>
 
@@ -35,12 +19,11 @@
 - [Key Features](#key-features)
 - [System Architecture](#system-architecture)
 - [Project Roadmap](#project-roadmap)
-- [Technology Stack](#technology-stack)
 - [Installation](#installation)
 - [Usage](#usage)
 - [API Reference](#api-reference)
 - [Contributing](#contributing)
-- [License](#license)
+
 
 ---
 
