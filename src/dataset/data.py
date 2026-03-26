@@ -14,8 +14,12 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Set, Dict, List, Optional, Any
 
+# Import new vulnerability detection engines
+from .baseline_engine import BaselineEngine
+from .payload_mutation_engine import PayloadMutationEngine
+
 class VulnerabilityDataCollector:
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "../config/config.json"):
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
         
@@ -23,6 +27,10 @@ class VulnerabilityDataCollector:
         self.visited_urls: Set[str] = set()
         self.results: List[Dict] = []
         self.stats = {'requests': 0, 'vulns': 0, 'errors': 0}
+        
+        # Initialize new vulnerability detection engines
+        self.baseline_engine: Optional[BaselineEngine] = None
+        self.mutation_engine = PayloadMutationEngine()
         
         # Create output dir if needed
         if self.config['output']['save_raw_responses']:
@@ -51,6 +59,13 @@ class VulnerabilityDataCollector:
             connector=connector,
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=self.config['scanning']['timeout'])
+        )
+        
+        # Initialize baseline engine with the session
+        self.baseline_engine = BaselineEngine(
+            session=self.session,
+            timeout=self.config['scanning']['timeout'],
+            slow_threshold=self.config['detection']['slow_threshold']
         )
 
     def load_urls(self) -> List[str]:
@@ -336,12 +351,25 @@ class VulnerabilityDataCollector:
         }
 
     async def test_payload(self, url: str, method: str, param: str, 
-                          payload: str, payload_type: str, baseline_response: Optional[Dict] = None) -> Optional[Dict]:
-        """Test single payload and collect data"""
+                          payload: str, payload_type: str, baseline_response: Optional[Dict] = None,
+                          mutation_type: str = 'original', attempt_number: int = 1) -> Optional[Dict]:
+        """
+        Test single payload with enhanced baseline comparison and exploit confirmation.
+        
+        Returns comprehensive record with:
+        - Baseline comparisons (status, time, size, content)
+        - Exploit confirmation metrics
+        - Reflection analysis
+        - Confidence scoring
+        """
         start_time = time.time()
         scan_id = hashlib.md5(f"{url}{method}{payload}{time.time()}".encode()).hexdigest()[:12]
         
         try:
+            # Get clean baseline if not provided
+            if baseline_response is None and self.baseline_engine:
+                baseline_response = await self.baseline_engine.get_baseline(url, method)
+            
             # Construct request based on method
             is_api = '/api/' in url or url.endswith('.json') or 'application/json' in str(self.session.headers.get('Accept', ''))
             
@@ -355,68 +383,106 @@ class VulnerabilityDataCollector:
             
             elif method in ['POST', 'PUT']:
                 if is_api:
-                    # Send JSON payload for API endpoints
                     data = {param: payload}
                     headers = {'Content-Type': 'application/json'}
                     resp = await self.session.request(method, url, json=data, headers=headers)
                 else:
-                    # Send form data for regular endpoints
                     data = {param: payload}
                     resp = await self.session.request(method, url, data=data)
-            
             else:
                 resp = await self.session.request(method, url)
             
             response_time = time.time() - start_time
+            response_time_ms = response_time * 1000
             self.stats['requests'] += 1
             
             response_text = await resp.text()
-            response_hash = hashlib.sha256(response_text.encode()).hexdigest()[:16]
+            response_hash = hashlib.sha256(response_text.encode()).hexdigest()
             
-            # Baseline comparison
-            baseline_diff = 0
-            baseline_content_changed = False
-            baseline_status_changed = False
-            if baseline_response:
-                baseline_diff = len(response_text) - baseline_response['size']
-                baseline_content_changed = response_hash != baseline_response['hash']
-                baseline_status_changed = resp.status != baseline_response['status']
+            # ===== BASELINE COMPARISON (CRITICAL) =====
+            comparison_metrics = {}
+            if baseline_response and self.baseline_engine:
+                attacked_response = {
+                    'status': resp.status,
+                    'time_ms': response_time_ms,
+                    'size': len(response_text),
+                    'hash': response_hash,
+                    'content': response_text
+                }
+                comparison_metrics = await self.baseline_engine.compare_responses(
+                    url, method, baseline_response, attacked_response, payload
+                )
             
-            # Security analysis
+            # ===== SECURITY HEADERS & COOKIES =====
             sec_headers = self._analyze_security_headers(dict(resp.headers))
             cookies = self._analyze_cookies(resp.headers.getall('Set-Cookie', []))
             
-            # Vulnerability detection
+            # ===== VULNERABILITY DETECTION =====
             vuln = self._detect_vulnerability(payload_type, response_text, resp.status, response_time)
             
-            # Feature extraction
+            # ===== ENHANCED EXPLOIT CONFIRMATION =====
+            exploit_confirmed = self._confirm_exploit(
+                payload_type=payload_type,
+                payload=payload,
+                response=response_text,
+                status_code=resp.status,
+                response_time=response_time,
+                baseline_response=baseline_response,
+                attacked_response={
+                    'status': resp.status,
+                    'time_ms': response_time_ms,
+                    'size': len(response_text),
+                    'hash': response_hash
+                },
+                comparison_metrics=comparison_metrics,
+                vuln_detected=vuln['detected'],
+                confidence=vuln['confidence']
+            )
+            
+            # ===== CONFIDENCE SCORING =====
+            confidence_score = self._calculate_confidence_score(
+                payload_type=payload_type,
+                vuln=vuln,
+                comparison_metrics=comparison_metrics,
+                exploit_confirmed=exploit_confirmed,
+                reflection_present=comparison_metrics.get('payload_reflected', False)
+            )
+            
+            # ===== FEATURE EXTRACTION =====
             features = self._extract_features(url, method, payload, response_text, dict(resp.headers), response_time, resp.status)
             
-            # New features: payload reflection and exploit confirmation
-            payload_reflected = payload in response_text
-            payload_transformed = quote(payload) in response_text or payload.replace(' ', '%20') in response_text
-            exploit_confirmed = vuln['detected'] and vuln['confidence'] >= 0.9
+            # ===== PAYLOAD REFLECTION ANALYSIS =====
+            reflection_data = comparison_metrics.get('reflection_context', []) if comparison_metrics else []
+            payload_reflected = comparison_metrics.get('payload_reflected', payload in response_text) if comparison_metrics else (payload in response_text)
+            
+            # ===== FILTER/WAF DETECTION =====
+            payload_blocked = self._detect_blocking(payload, response_text, baseline_response)
+            filter_type = self._detect_filter_type(payload, response_text, baseline_response) if payload_blocked else 'none'
             
             # Save raw response if significant
-            if self.config['output']['save_raw_responses'] and vuln['detected']:
+            if self.config['output']['save_raw_responses'] and (vuln['detected'] or exploit_confirmed):
                 async with aiofiles.open(f"{self.config['output']['response_dir']}/{scan_id}.txt", 'w') as f:
                     await f.write(response_text[:5000])
             
-            if vuln['detected']:
+            if vuln['detected'] or exploit_confirmed:
                 self.stats['vulns'] += 1
             
-            # Compile comprehensive record
+            # Track mutation effectiveness
+            if exploit_confirmed:
+                self.mutation_engine.track_mutation(payload, mutation_type, True, payload_type)
+            
+            # ===== BUILD COMPREHENSIVE RECORD =====
             record = {
                 # IDs & Timestamps
                 'scan_id': scan_id,
                 'timestamp': datetime.now().isoformat(),
-                'dataset_version': '1.0',
+                'dataset_version': '2.0',  # UPGRADED VERSION
                 
                 # Target Info
                 'target_url': url,
                 'base_domain': urlparse(url).netloc,
                 'endpoint_path': urlparse(url).path,
-                'depth_level': 0,  # Will be set by crawler
+                'depth_level': 0,
                 'is_api_endpoint': is_api,
                 
                 # Request Details
@@ -426,15 +492,45 @@ class VulnerabilityDataCollector:
                 'payload_type': payload_type,
                 'payload_encoded': quote(payload),
                 'attack_vector': 'url_param' if method == 'GET' else 'body',
+                'mutation_type': mutation_type,
+                'attempt_number': attempt_number,
+                'payload_complexity': self.mutation_engine.get_payload_complexity(payload),
+                'payload_length': len(payload),
+                'special_char_count': len(re.findall(r'[<>{}()\[\]"\';\\]', payload)),
                 
                 # Response Details
                 'response_status': resp.status,
-                'response_time_ms': round(response_time * 1000, 2),
+                'response_time_ms': round(response_time_ms, 2),
                 'response_size_bytes': len(response_text),
                 'response_hash': response_hash,
                 'content_type': resp.headers.get('Content-Type', 'unknown'),
                 
-                # Security Headers (Individual fields for AI)
+                # BASELINE COMPARISON (NEW)
+                'baseline_status': baseline_response['status'] if baseline_response else None,
+                'baseline_time_ms': baseline_response['time_ms'] if baseline_response else None,
+                'baseline_size': baseline_response['size'] if baseline_response else None,
+                'baseline_hash': baseline_response['hash'] if baseline_response else None,
+                'time_diff_ms': comparison_metrics.get('time_diff_ms', 0),
+                'size_diff': comparison_metrics.get('size_diff', 0),
+                'size_diff_percent': comparison_metrics.get('size_diff_percent', 0),
+                'content_diff_ratio': comparison_metrics.get('content_diff_ratio', 0),
+                'status_diff': comparison_metrics.get('status_diff', False),
+                'content_unchanged': comparison_metrics.get('content_unchanged', True),
+                
+                # REFLECTION & ENCODING (NEW)
+                'payload_reflected': payload_reflected,
+                'reflection_count': comparison_metrics.get('reflection_count', 0),
+                'reflection_context': ','.join(reflection_data) if reflection_data else 'none',
+                'reflection_position': comparison_metrics.get('reflection_position', -1),
+                'payload_encoded': comparison_metrics.get('encoded', False),
+                'encoding_detected': comparison_metrics.get('encoding_type', 'none'),
+                
+                # FILTERING/WAF DETECTION (NEW)
+                'payload_blocked': payload_blocked,
+                'filter_type': filter_type,
+                'response_diff_type': self._categorize_diff_type(payload, response_text, baseline_response),
+                
+                # Security Headers
                 'header_x_frame': sec_headers['x_frame_options'],
                 'header_csp': sec_headers['csp'],
                 'header_hsts': sec_headers['hsts'],
@@ -451,18 +547,15 @@ class VulnerabilityDataCollector:
                 'cookie_samesite': cookies['samesite'],
                 'cookie_count': cookies['count'],
                 
-                # Vulnerability Detection (Target variable + features)
+                # VULNERABILITY DETECTION & EXPLOIT CONFIRMATION (ENHANCED)
                 'vulnerability_detected': vuln['detected'],
                 'vulnerability_type': vuln['type'],
                 'vulnerability_severity': vuln['severity'],
-                'confidence_score': vuln['confidence'],
+                'confidence_score': confidence_score,  # UPGRADED SCORING
                 'evidence': vuln['evidence'],
                 'false_positive_risk': vuln['false_positive_risk'],
-                'exploit_confirmed': exploit_confirmed,
-                
-                # Payload Analysis
-                'payload_reflected': payload_reflected,
-                'payload_transformed': payload_transformed,
+                'exploit_confirmed': exploit_confirmed,  # ENHANCED CONFIRMATION
+                'execution_signal': self._detect_execution_signal(response_text, payload_type),
                 
                 # ML Features
                 'text_features': features['text_features'],
@@ -473,19 +566,20 @@ class VulnerabilityDataCollector:
                 'payload_fingerprint': features['payload_hash'],
                 
                 # Behavioral Analysis
-                'status_changed': baseline_status_changed,
-                'content_changed': baseline_content_changed,
-                'baseline_size_diff': baseline_diff,
-                'time_anomaly': response_time > self.config['detection']['slow_threshold'],
+                'time_anomaly': comparison_metrics.get('time_anomaly', False),
+                'size_anomaly': comparison_metrics.get('size_anomaly', False),
+                'content_anomaly': comparison_metrics.get('content_anomaly', False),
+                'anomaly_score': comparison_metrics.get('anomaly_score', 0),
+                'is_time_based_blind': comparison_metrics.get('is_time_based_blind', False),
                 
                 # Context
                 'requires_authentication': resp.status == 401,
                 'is_redirect': resp.status in [301, 302, 307, 308],
                 'is_error_page': resp.status >= 400,
                 
-                # Raw Data (Optional, for debugging)
+                # Raw Data
                 'response_preview': response_text[:500].replace('\n', ' ').replace('\r', ''),
-                'request_headers': str(dict(resp.request_info.headers)),
+                'request_headers': str(dict(resp.request_info.headers if hasattr(resp, 'request_info') else {})),
             }
             
             return record
@@ -496,6 +590,280 @@ class VulnerabilityDataCollector:
         except Exception as e:
             self.stats['errors'] += 1
             return None
+
+    def _confirm_exploit(self, payload_type: str, payload: str, response: str, status_code: int,
+                        response_time: float, baseline_response: Optional[Dict], 
+                        attacked_response: Dict, comparison_metrics: Dict,
+                        vuln_detected: bool, confidence: float) -> bool:
+        """
+        Multi-layered exploit confirmation logic.
+        
+        An exploit is CONFIRMED if:
+        1. Reflection is proven + anomaly detected, OR
+        2. Error-based detection with high confidence, OR
+        3. Time-based timing anomaly is significant, OR
+        4. Status code change indicates success
+        """
+        # If no baseline, use lower confidence threshold
+        if not baseline_response:
+            return vuln_detected and confidence >= 0.85
+        
+        # Reflection-based confirmation
+        payload_reflected = comparison_metrics.get('payload_reflected', False)
+        reflection_context = comparison_metrics.get('reflection_context', [])
+        encoding_detected = comparison_metrics.get('encoding_detected', 'none') != 'none'
+        
+        # Content-based confirmation
+        content_anomaly = comparison_metrics.get('content_anomaly', False)
+        content_diff = comparison_metrics.get('content_diff_ratio', 0)
+        size_anomaly = comparison_metrics.get('size_anomaly', False)
+        
+        # Time-based confirmation
+        time_anomaly = comparison_metrics.get('time_anomaly', False)
+        time_diff_ms = comparison_metrics.get('time_diff_ms', 0)
+        is_time_based = comparison_metrics.get('is_time_based_blind', False)
+        
+        # Status code confirmation
+        status_diff = comparison_metrics.get('status_diff', False)
+        baseline_status = baseline_response.get('status', 200) if baseline_response else 200
+        
+        confirmation_signals = []
+        
+        # Signal 1: Reflection with anomaly
+        if payload_reflected and (content_anomaly or size_anomaly):
+            confirmation_signals.append('reflection_with_anomaly')
+        
+        # Signal 2: Reflection with encoding transformation
+        if payload_reflected and encoding_detected:
+            confirmation_signals.append('reflection_encoded')
+        
+        # Signal 3: Clear error-based detection
+        if vuln_detected and confidence >= 0.90:
+            confirmation_signals.append('error_based_detection')
+        
+        # Signal 4: Significant time delay (for blind attacks)
+        if is_time_based or (time_diff_ms > 3000):  # > 3 seconds
+            confirmation_signals.append('time_based_delay')
+        
+        # Signal 5: Status code change to error
+        if status_diff and status_code >= 400:
+            confirmation_signals.append('status_error_change')
+        
+        # Signal 6: Large content difference
+        if content_diff > 0.25:  # 25% different
+            confirmation_signals.append('significant_content_change')
+        
+        # Confirmation rules
+        signal_count = len(confirmation_signals)
+        
+        # Rule 1: At least 2 signals = confirmed
+        if signal_count >= 2:
+            return True
+        
+        # Rule 2: Single but strong signal
+        if signal_count == 1:
+            strong_signals = ['error_based_detection', 'time_based_delay', 'reflection_with_anomaly']
+            if confirmation_signals[0] in strong_signals:
+                return True
+        
+        # Rule 3: If no signals but very high confidence from pattern matching
+        if signal_count == 0 and confidence >= 0.95:
+            return True
+        
+        return False
+    
+    def _calculate_confidence_score(self, payload_type: str, vuln: Dict, 
+                                    comparison_metrics: Dict, exploit_confirmed: bool,
+                                    reflection_present: bool) -> float:
+        """
+        Calculate confidence score (0-1) based on multiple factors.
+        
+        Factors:
+        - Exploit confirmation (strongest weight)
+        - Pattern matching confidence
+        - Reflection presence
+        - Anomaly score
+        - Payload type (some are harder to confirm)
+        """
+        score = 0.0
+        weights = {}
+        
+        # Base confidence from pattern matching
+        base_confidence = vuln.get('confidence', 0)
+        score += base_confidence * 0.3  # 30% weight
+        weights['pattern_match'] = 0.3
+        
+        # Exploit confirmation (50% weight - most important)
+        if exploit_confirmed:
+            score += 0.5
+        weights['exploit_confirmed'] = 0.5
+        
+        # Reflection presence (10% weight)
+        if reflection_present:
+            score += 0.1
+        weights['reflection'] = 0.1
+        
+        # Anomaly score (10% weight)
+        anomaly_score = comparison_metrics.get('anomaly_score', 0)
+        score += min(anomaly_score, 1.0) * 0.1
+        weights['anomaly'] = 0.1
+        
+        # Payload type difficulty adjustment
+        type_difficulty = {
+            'xss': 0.95,  # Higher = easier to confirm
+            'sqli': 0.85,
+            'command': 0.90,
+            'path_traversal': 0.80,
+            'idor': 0.70,
+            'ssrf': 0.75,
+            'xxe': 0.80,
+            'ssti': 0.88,
+        }
+        
+        difficulty_factor = type_difficulty.get(payload_type, 0.75)
+        
+        # Final score capped at 1.0
+        final_score = min(score * (difficulty_factor / 0.8), 1.0)  # Normalize
+        return round(final_score, 3)
+    
+    def _detect_blocking(self, payload: str, response: str, baseline_response: Optional[Dict]) -> bool:
+        """
+        Detect if payload was blocked/filtered.
+        
+        Indicators:
+        - Payload doesn't appear (and not encoded)
+        - Response size significantly reduced
+        - Error page returned
+        - WAF/firewall signatures
+        """
+        if not baseline_response:
+            # Without baseline, check if payload appears in response
+            return payload not in response
+        
+        # Check if payload is in response
+        payload_in_response = payload in response or quote(payload) in response
+        
+        # Check for encoding (means it got through but transformed)
+        import html
+        payload_encoded = (html.escape(payload) in response or 
+                          quote(payload) in response)
+        
+        # If encoded, not blocked
+        if payload_encoded:
+            return False
+        
+        # Check size reduction (indicates filtering)
+        baseline_size = baseline_response.get('size', 0)
+        response_size = len(response)
+        size_reduction = (baseline_size - response_size) / baseline_size if baseline_size > 0 else 0
+        
+        # Payload not in response and significant size change = blocked
+        if not payload_in_response and size_reduction > 0.1:  # > 10% reduction
+            return True
+        
+        # Check for WAF/firewall error patterns
+        waf_patterns = [
+            r'WAF|web application firewall|access denied|403|forbidden',
+            r'blocked|filtered|detected|suspicious',
+            r'attack|malicious|dangerous',
+            r'security|protection|defense'
+        ]
+        
+        for pattern in waf_patterns:
+            if re.search(pattern, response, re.I):
+                return True
+        
+        return False
+    
+    def _detect_filter_type(self, payload: str, response: str, baseline_response: Optional[Dict]) -> str:
+        """
+        Identify what type of filtering was applied.
+        
+        Returns: waf|sanitized|encoded|removed|none
+        """
+        import html
+        
+        # Check if payload was encoded (not removed)
+        encoded_variants = [
+            quote(payload),
+            html.escape(payload),
+            quote(quote(payload))
+        ]
+        
+        for variant in encoded_variants:
+            if variant in response:
+                return 'encoded'
+        
+        # Check if partially removed
+        payload_words = payload.split()
+        matches = sum(1 for word in payload_words if word in response)
+        if matches > 0 and matches < len(payload_words):
+            return 'sanitized'
+        
+        # Check for WAF signatures
+        if re.search(r'WAF|firewall|blocked|403', response, re.I):
+            return 'waf'
+        
+        # Check if completely removed
+        if payload not in response:
+            return 'removed'
+        
+        return 'none'
+    
+    def _categorize_diff_type(self, payload: str, response: str, baseline_response: Optional[Dict]) -> str:
+        """
+        Categorize what type of difference(s) appeared in response.
+        
+        Returns: encoded|stripped|unchanged|manipulated
+        """
+        if not baseline_response:
+            return 'unknown'
+        
+        baseline_content = baseline_response.get('content_preview', '')
+        
+        # Check for encoding
+        import html
+        if html.escape(payload) in response or quote(payload) in response:
+            return 'encoded'
+        
+        # Check for stripping
+        if len(response) < len(baseline_content):
+            return 'stripped'
+        
+        # Check for manipulation (different but not empty)
+        if response == baseline_content:
+            return 'unchanged'
+        
+        return 'manipulated'
+    
+    def _detect_execution_signal(self, response: str, payload_type: str) -> str:
+        """
+        Detect execution signals that confirm exploitation.
+        
+        Returns: alert_triggered|dom_execution|time_delay_detected|
+                 out_of_band_callback|error_based_response|none
+        """
+        # JavaScript execution
+        if 'alert(' in response or 'confirm(' in response or 'undefined' in response:
+            return 'alert_triggered'
+        
+        # DOM manipulation
+        if re.search(r'innerHTML|outerHTML|textContent|appendChild', response, re.I):
+            return 'dom_execution'
+        
+        # Error messages (SQLi, SSTI, etc)
+        if re.search(r'SQL error|Traceback|Exception|error at', response, re.I):
+            return 'error_based_response'
+        
+        # Command execution output
+        if re.search(r'root:|bin/|etc/passwd|uid=|gid=', response, re.I):
+            return 'command_execution'
+        
+        # Template injection execution
+        if re.search(r'{{|}})|\$\{|<%= ', response, re.I):
+            return 'template_execution'
+        
+        return 'none'
 
     async def analyze_javascript(self, url: str) -> Optional[Dict]:
         """Static analysis of JS files"""

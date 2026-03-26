@@ -87,8 +87,8 @@
   },
 
   "output": {
-    "csv_file": "ai_training_dataset.csv",
+    "csv_file": "data/ai_training_dataset.csv",
     "save_raw_responses": false,
-    "response_dir": "raw_responses"
+    "response_dir": "data/raw_responses"
   }
 }

@@ -1,7 +1,16 @@
+import os
+import sys
 from flask import Flask, render_template, request
+
+# Ensure /src root is in path for scanner import
+src_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if src_root not in sys.path:
+    sys.path.insert(0, src_root)
+
 from scanner import scan_url
 
-app = Flask(__name__)
+template_dir = os.path.join(os.path.dirname(__file__), '..', 'templates')
+app = Flask(__name__, template_folder=template_dir)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
