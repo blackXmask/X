@@ -27,6 +27,8 @@
 ## Overview
 
 Our system improves traditional web vulnerability detection by integrating an XGBoost model that learns patterns in malicious inputs, reducing false positives and improving detection accuracy. The platform is named **Platform X**, reflecting its advanced, intelligent approach to web application security.
+
+
 ---
 
 ### Key Capabilities
