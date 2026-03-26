@@ -212,23 +212,6 @@ Project Root
 │   └── raw_responses/                       [40+ response files]
 └── docs/                                    [Documentation folder]
     └── [Various markdown files]
-```
-
-### Line Count by Module
-
-| Module | Lines | Purpose |
-|--------|-------|---------|
-| data.py | 1400+ | Main orchestrator, all processing logic |
-| payload_mutation_engine.py | 400+ | 20+ payload transformation methods |
-| baseline_engine.py | 300+ | Response comparison and anomaly detection |
-| context_analyzer.py | 300+ | Endpoint type and security detection |
-| labeling_engine.py | 200+ | True label generation (0/1 classification) |
-| attack_chain.py | 150+ | Multi-step attack progression tracking |
-| example_usage.py | 100+ | Usage examples and reference code |
-| scanner.py | 91 | Simple header/cookie checks |
-| app.py | 23 | Flask web UI entry point |
-| **TOTAL** | **2964** | **4000+ with helpers and config** |
-
 ---
 
 ## 2. IMPORT CONNECTIVITY MAP
