@@ -1,4 +1,5 @@
 #C:\Users\p7inc3\AppData\Local\Programs\Python\Python312\python.exe data.py
+import argparse
 import asyncio
 import aiohttp
 import aiofiles
@@ -15,8 +16,12 @@ from datetime import datetime
 from typing import Set, Dict, List, Optional, Any
 
 # Import new vulnerability detection engines
-from .baseline_engine import BaselineEngine
-from .payload_mutation_engine import PayloadMutationEngine
+try:
+    from .baseline_engine import BaselineEngine
+    from .payload_mutation_engine import PayloadMutationEngine
+except ImportError:
+    from src.dataset.baseline_engine import BaselineEngine
+    from src.dataset.payload_mutation_engine import PayloadMutationEngine
 
 class VulnerabilityDataCollector:
     def __init__(self, config_path: str = "../config/config.json"):
@@ -1071,5 +1076,33 @@ class VulnerabilityDataCollector:
         print(f"[+] Saved {len(self.results)} records to {output_file}")
 
 if __name__ == "__main__":
-    collector = VulnerabilityDataCollector()
+    parser = argparse.ArgumentParser(description='Vulnerability scanner dataset runner')
+    parser.add_argument('--config', type=str, default='config.json',
+                        help='Path to config file (default: config.json)')
+    parser.add_argument('--url-file', type=str, default=None,
+                        help='Optional list of URLs file (one per line)')
+    parser.add_argument('--output-csv', type=str, default=None,
+                        help='Optional output CSV path (override config output.csv_file)')
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.config):
+        print(f"Config file not found: {args.config}")
+        print("Create a config.json in project root or pass --config path")
+        exit(1)
+
+    collector = VulnerabilityDataCollector(config_path=args.config)
+
+    if args.url_file:
+        if os.path.exists(args.url_file):
+            with open(args.url_file, 'r', encoding='utf-8') as f:
+                urls = [line.strip() for line in f if line.strip() and not line.strip().startswith('#')]
+            collector.config['targets']['urls'] = urls
+        else:
+            print(f"URL file not found: {args.url_file}")
+            exit(1)
+
+    if args.output_csv:
+        collector.config['output']['csv_file'] = args.output_csv
+
     asyncio.run(collector.run())
