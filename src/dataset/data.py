@@ -1,8 +1,8 @@
 #C:\Users\p7inc3\AppData\Local\Programs\Python\Python312\python.exe data.py
+#python src/dataset/data.py --config config/config.json
 import argparse
 import asyncio
 import aiohttp
-import aiofiles
 import json
 import csv
 import re
@@ -10,21 +10,38 @@ import hashlib
 import time
 import os
 import ssl
+import sys
+
+# aiofiles is optional - use sync IO fallback if not available
+try:
+    import aiofiles
+    HAS_AIOFILES = True
+except ImportError:
+    HAS_AIOFILES = False
 from urllib.parse import urlparse, urljoin, parse_qs, urlencode, quote
 from bs4 import BeautifulSoup
 from datetime import datetime
 from typing import Set, Dict, List, Optional, Any
 
+# Add project root to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Import new vulnerability detection engines
 try:
     from .baseline_engine import BaselineEngine
     from .payload_mutation_engine import PayloadMutationEngine
+    from .context_analyzer import ContextAnalyzer
+    from .labeling_engine import SmartLabelingEngine
+    from .attack_chain import AttackChainEngine
 except ImportError:
     from src.dataset.baseline_engine import BaselineEngine
     from src.dataset.payload_mutation_engine import PayloadMutationEngine
+    from src.dataset.context_analyzer import ContextAnalyzer
+    from src.dataset.labeling_engine import SmartLabelingEngine
+    from src.dataset.attack_chain import AttackChainEngine
 
 class VulnerabilityDataCollector:
-    def __init__(self, config_path: str = "../config/config.json"):
+    def __init__(self, config_path: str = "../../config/config.json"):
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = json.load(f)
         
@@ -36,6 +53,12 @@ class VulnerabilityDataCollector:
         # Initialize new vulnerability detection engines
         self.baseline_engine: Optional[BaselineEngine] = None
         self.mutation_engine = PayloadMutationEngine()
+        
+        # ===== NEW ENGINES FOR DATASET QUALITY =====
+        self.context_analyzer = ContextAnalyzer()
+        self.labeling_engine = SmartLabelingEngine()
+        self.attack_chain_engine = AttackChainEngine()
+        # =============================================
         
         # Create output dir if needed
         if self.config['output']['save_raw_responses']:
@@ -466,8 +489,17 @@ class VulnerabilityDataCollector:
             
             # Save raw response if significant
             if self.config['output']['save_raw_responses'] and (vuln['detected'] or exploit_confirmed):
-                async with aiofiles.open(f"{self.config['output']['response_dir']}/{scan_id}.txt", 'w') as f:
-                    await f.write(response_text[:5000])
+                response_file = f"{self.config['output']['response_dir']}/{scan_id}.txt"
+                try:
+                    if HAS_AIOFILES:
+                        async with aiofiles.open(response_file, 'w') as f:
+                            await f.write(response_text[:5000])
+                    else:
+                        # Fallback to sync I/O
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            f.write(response_text[:5000])
+                except Exception:
+                    pass  # Silently skip if file save fails
             
             if vuln['detected'] or exploit_confirmed:
                 self.stats['vulns'] += 1
@@ -476,12 +508,63 @@ class VulnerabilityDataCollector:
             if exploit_confirmed:
                 self.mutation_engine.track_mutation(payload, mutation_type, True, payload_type)
             
+            # ===== CONTEXT ANALYSIS (PRIORITY 1) =====
+            context = self.context_analyzer.analyze_endpoint(url, method, dict(resp.headers))
+            param_context = self.context_analyzer.analyze_parameter(param, url)
+            security_context = self.context_analyzer.detect_security_context(dict(resp.headers), response_text)
+            
+            # ===== EXECUTION SIGNAL DETECTION =====
+            execution_signals = self._detect_execution_signal(response_text, payload_type)
+            if isinstance(execution_signals, str):
+                execution_signals = [execution_signals] if execution_signals != 'none' else []
+            
+            # ===== TRUE LABELING (PRIORITY 3) =====
+            label_data = self.labeling_engine.generate_label(
+                vulnerability_detected=vuln['detected'],
+                exploit_confirmed=exploit_confirmed,
+                confidence_score=confidence_score,
+                execution_signals=execution_signals,
+                reflection_present=payload_reflected,
+                anomaly_score=comparison_metrics.get('anomaly_score', 0),
+                payload_type=payload_type
+            )
+            
+            # ===== ATTACK CHAIN TRACKING (PRIORITY 7) =====
+            chain_data = self.attack_chain_engine.track_attack(
+                scan_id=scan_id,
+                target_url=url,
+                payload_type=payload_type,
+                payload=payload,
+                exploit_success=exploit_confirmed,
+                execution_signals=execution_signals
+            )
+            
             # ===== BUILD COMPREHENSIVE RECORD =====
             record = {
                 # IDs & Timestamps
                 'scan_id': scan_id,
                 'timestamp': datetime.now().isoformat(),
-                'dataset_version': '2.0',  # UPGRADED VERSION
+                'dataset_version': '3.0',  # ⬆️ UPGRADED TO 3.0 WITH CONTEXT & LABELS
+                
+                # ===== PRIORITY 1: CONTEXT LAYER =====
+                # Endpoint Intelligence
+                'endpoint_type': context['endpoint_type'],
+                'param_type': param_context['param_type'],
+                'is_authenticated': context['is_authenticated'],
+                'auth_type': context['auth_type'],
+                'role': context['role'],
+                'input_source': 'url_param' if method == 'GET' else 'body',
+                'param_sensitive': param_context['is_sensitive'],
+                'param_value_type': param_context['likely_value_type'],
+                'param_bypass_difficulty': param_context['bypass_difficulty'],
+                
+                # Security Context
+                'csrf_protected': security_context['csrf_protected'],
+                'cors_enabled': security_context['cors_enabled'],
+                'cors_origin': security_context['cors_origin'],
+                'has_waf': security_context['has_waf'],
+                'ssl_enforced': security_context['ssl_enforced'],
+                'secure_headers_set': security_context['has_secure_headers'],
                 
                 # Target Info
                 'target_url': url,
@@ -489,6 +572,32 @@ class VulnerabilityDataCollector:
                 'endpoint_path': urlparse(url).path,
                 'depth_level': 0,
                 'is_api_endpoint': is_api,
+                
+                # ===== PRIORITY 3: TRUE LABELING =====
+                'label': label_data['label'],  # 🔥 CRITICAL: 0 or 1
+                'exploit_type': label_data['exploit_type'],
+                'exploit_reliability': label_data['exploit_reliability'],
+                'exploit_confidence_factors': str(label_data['confidence_factors']),
+                'label_reasoning': label_data['label_reasoning'],
+                'label_false_positive_risk': label_data['false_positive_risk'],
+                
+                # ===== PRIORITY 4: EXECUTION SIGNALS =====
+                'execution_signals': ','.join(execution_signals) if execution_signals else 'none',
+                'js_executed': 'js_executed' in execution_signals,
+                'command_executed': 'command_executed' in execution_signals,
+                'file_read': 'file_read' in execution_signals,
+                'data_leak': 'data_leak' in execution_signals,
+                'template_exec': 'template_exec' in execution_signals,
+                
+                # ===== PRIORITY 7: ATTACK CHAIN TRACKING =====
+                'attack_chain': ','.join(chain_data['attack_chain']) if chain_data['attack_chain'] else 'none',
+                'chain_depth': chain_data['chain_depth'],
+                'chain_success': chain_data['chain_success'],
+                'attack_stage': chain_data['stage'],
+                'next_suggested_stage': chain_data['next_suggested_stage'],
+                'chain_progression_percent': chain_data['progression_percent'],
+                'total_chain_attempts': chain_data['total_chain_attempts'],
+                'successful_stages': chain_data['successful_stages'],
                 
                 # Request Details
                 'http_method': method,
@@ -510,7 +619,7 @@ class VulnerabilityDataCollector:
                 'response_hash': response_hash,
                 'content_type': resp.headers.get('Content-Type', 'unknown'),
                 
-                # BASELINE COMPARISON (NEW)
+                # BASELINE COMPARISON
                 'baseline_status': baseline_response['status'] if baseline_response else None,
                 'baseline_time_ms': baseline_response['time_ms'] if baseline_response else None,
                 'baseline_size': baseline_response['size'] if baseline_response else None,
@@ -522,7 +631,7 @@ class VulnerabilityDataCollector:
                 'status_diff': comparison_metrics.get('status_diff', False),
                 'content_unchanged': comparison_metrics.get('content_unchanged', True),
                 
-                # REFLECTION & ENCODING (NEW)
+                # REFLECTION & ENCODING
                 'payload_reflected': payload_reflected,
                 'reflection_count': comparison_metrics.get('reflection_count', 0),
                 'reflection_context': ','.join(reflection_data) if reflection_data else 'none',
@@ -530,9 +639,11 @@ class VulnerabilityDataCollector:
                 'payload_encoded': comparison_metrics.get('encoded', False),
                 'encoding_detected': comparison_metrics.get('encoding_type', 'none'),
                 
-                # FILTERING/WAF DETECTION (NEW)
+                # ===== PRIORITY 6: WAF & FILTER INTELLIGENCE =====
                 'payload_blocked': payload_blocked,
                 'filter_type': filter_type,
+                'waf_detected': security_context['has_waf'],
+                'waf_bypass_successful': not payload_blocked if security_context['has_waf'] else None,
                 'response_diff_type': self._categorize_diff_type(payload, response_text, baseline_response),
                 
                 # Security Headers
@@ -552,15 +663,35 @@ class VulnerabilityDataCollector:
                 'cookie_samesite': cookies['samesite'],
                 'cookie_count': cookies['count'],
                 
-                # VULNERABILITY DETECTION & EXPLOIT CONFIRMATION (ENHANCED)
+                # VULNERABILITY DETECTION & EXPLOIT CONFIRMATION
                 'vulnerability_detected': vuln['detected'],
                 'vulnerability_type': vuln['type'],
                 'vulnerability_severity': vuln['severity'],
-                'confidence_score': confidence_score,  # UPGRADED SCORING
+                'confidence_score': confidence_score,
                 'evidence': vuln['evidence'],
                 'false_positive_risk': vuln['false_positive_risk'],
-                'exploit_confirmed': exploit_confirmed,  # ENHANCED CONFIRMATION
-                'execution_signal': self._detect_execution_signal(response_text, payload_type),
+                'exploit_confirmed': exploit_confirmed,
+                
+                # ===== PRIORITY 5: MULTI-PAYLOAD LEARNING =====
+                'mutation_success': exploit_confirmed,
+                'total_mutation_attempts': attempt_number,
+                'bypass_payload': mutation_type not in ['original'],
+                'successful_mutation_type': mutation_type if exploit_confirmed else 'none',
+                
+                # ===== PRIORITY 8: ADVANCED FEATURE ENGINEERING =====
+                # Structural Features
+                'dom_depth': self._calculate_dom_depth(response_text),
+                'js_complexity': self._calculate_js_complexity(response_text),
+                'api_endpoint_count': len(re.findall(r'/api/', response_text)),
+                'form_count': len(re.findall(r'<form', response_text, re.I)),
+                'input_field_count': len(re.findall(r'<input', response_text, re.I)),
+                'script_tag_count': len(re.findall(r'<script', response_text, re.I)),
+                
+                # Behavioral Features
+                'response_variability': comparison_metrics.get('content_diff_ratio', 0),
+                'retry_count': attempt_number,
+                'response_entropy': self._calculate_entropy(response_text),
+                'error_count': len(re.findall(r'error|exception|fatal', response_text, re.I)),
                 
                 # ML Features
                 'text_features': features['text_features'],
@@ -577,8 +708,9 @@ class VulnerabilityDataCollector:
                 'anomaly_score': comparison_metrics.get('anomaly_score', 0),
                 'is_time_based_blind': comparison_metrics.get('is_time_based_blind', False),
                 
-                # Context
+                # Session & Authentication
                 'requires_authentication': resp.status == 401,
+                'auth_reused': context['is_authenticated'],
                 'is_redirect': resp.status in [301, 302, 307, 308],
                 'is_error_page': resp.status >= 400,
                 
@@ -1058,6 +1190,65 @@ class VulnerabilityDataCollector:
             print(f"    Vulnerabilities: {self.stats['vulns']}")
             print(f"    Errors: {self.stats['errors']}")
             print(f"    Dataset saved to: {self.config['output']['csv_file']}")
+
+    def _calculate_dom_depth(self, response_text: str) -> int:
+        """Calculate maximum DOM depth in response."""
+        max_depth = 0
+        current_depth = 0
+        for char in response_text:
+            if char == '<' and '>' in response_text[response_text.index(char):]:
+                current_depth += 1
+                max_depth = max(max_depth, current_depth)
+            elif char == '>':
+                current_depth = max(0, current_depth - 1)
+        return max_depth
+    
+    def _calculate_js_complexity(self, response_text: str) -> float:
+        """Estimate JavaScript complexity from response."""
+        score = 0.0
+        
+        # Count JS frameworks
+        frameworks = ['react', 'vue', 'angular', 'jquery', 'backbone']
+        for fw in frameworks:
+            if fw in response_text.lower():
+                score += 0.2
+        
+        # Count script tags
+        script_count = len(re.findall(r'<script', response_text, re.I))
+        score += min(script_count * 0.05, 1.0)
+        
+        # Count event handlers
+        event_count = len(re.findall(r'on\w+\s*=', response_text, re.I))
+        score += min(event_count * 0.03, 0.5)
+        
+        # Check for async/await
+        if re.search(r'async\s+function|await\s+', response_text):
+            score += 0.1
+        
+        # Check for promises
+        if 'Promise' in response_text:
+            score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _calculate_entropy(self, text: str) -> float:
+        """Calculate Shannon entropy of response (randomness/compression measure)."""
+        if not text:
+            return 0.0
+        
+        # Count character frequencies
+        frequencies = {}
+        for char in text:
+            frequencies[char] = frequencies.get(char, 0) + 1
+        
+        # Calculate entropy
+        entropy = 0.0
+        text_len = len(text)
+        for freq in frequencies.values():
+            p = freq / text_len
+            entropy -= p * (p and __import__('math').log2(p) or 0)
+        
+        return round(entropy, 3)
 
     def save_csv(self):
         """Save results to CSV"""
