@@ -154,7 +154,8 @@ class StopConditionEvaluator:
         
         # 7. False positive detection
         if signals_found > 0 and self._is_likely_false_positive(response_codes, signals_found):
-            analysis['stop_reasons'].append(StopReasonEnum.FALSE_POSITIVE_CONFIRMED.value)
+            # FIXED: enum member name is FALSE_POSITIVE
+            analysis['stop_reasons'].append(StopReasonEnum.FALSE_POSITIVE.value)
             analysis['stop_signals'] += 5
         
         # 8. Diminishing returns check

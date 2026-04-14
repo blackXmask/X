@@ -25,7 +25,7 @@ import ssl
 import sys
 import argparse
 import math
-from urllib.parse import urlparse, urljoin, parse_qs, quote
+from urllib.parse import urlparse, urljoin, parse_qs, quote, unquote
 from datetime import datetime
 from typing import Set, Dict, List, Optional, Any
 from collections import defaultdict
@@ -61,6 +61,67 @@ except ImportError as e:
 
 class UnifiedVulnerabilityScanner:
     """Master scanner with ML-quality dataset generation"""
+    # ADDED: stable dataset schema so CSV headers are always complete
+    EXPORT_EXCLUDE_COLUMNS = {
+        # Leakage / post-decision explanation fields (keep internal, drop from exported dataset)
+        'detection_reasons',
+        'strong_signals',
+        'weak_signals',
+        'error_detected',
+        'payload_reflected',
+        'execution_signals',
+        'chain_success',
+        'chain_depth',
+    }
+    TRAINING_EXCLUDE_COLUMNS = {
+        # Rule/scanner intelligence fields that should not feed model training
+        'risk_score',
+        'priority_score',
+        'attack_rank',
+        'strategy_name',
+        'anomaly_score',
+        'similarity_to_baseline',
+    }
+
+    DATASET_COLUMNS = [
+        'scan_id',
+        'url',
+        'parameter',
+        'payload',
+        'payload_type',
+        'payload_length',
+        'has_script_tag',
+        'has_special_chars',
+        'num_encoded_chars',
+        'is_url_encoded',
+        'keyword_xss_score',
+        'mutation_type',
+        'label',
+        'is_vulnerable',
+        'similarity_to_baseline',
+        'anomaly_score',
+        'time_anomaly',
+        'status_code',
+        'response_time',
+        'response_length',
+        'response_size',  # Backward compatibility alias
+        'entropy',
+        'waf_detected',
+        'has_auth',
+        'endpoint_type',
+        'risk_score',
+        'priority_score',
+        'attack_rank',
+        'strategy_name',
+        'attempt_count',
+        'failure_simulated',
+        'failure_mode',
+        'request_failed',
+        'sample_type',
+        'exclude_from_training',
+        'label_consistent',
+        'timestamp',
+    ]
     
     def __init__(self, config_path: str = "../../config/config.json"):
         """Initialize all modules"""
@@ -163,17 +224,34 @@ class UnifiedVulnerabilityScanner:
         
         return list(urls)[:self.config['targets']['max_urls']]
 
+    def _is_static_asset(self, url: str) -> bool:
+        """ADDED: skip binary/static assets that are not good scan targets."""
+        static_exts = {
+            '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.svg',
+            '.pdf', '.zip', '.rar', '.7z', '.tar', '.gz',
+            '.woff', '.woff2', '.ttf', '.eot',
+            '.mp4', '.mp3', '.avi', '.mov', '.wmv',
+            '.css', '.js', '.map'
+        }
+        path = urlparse(url).path.lower()
+        return any(path.endswith(ext) for ext in static_exts)
+
     async def fetch_with_retry(self, url: str, method: str = 'GET', data: Any = None, 
                               headers: Optional[Dict] = None, max_retries: int = 3) -> Optional[aiohttp.ClientResponse]:
         """Fetch URL with exponential backoff"""
         for attempt in range(max_retries):
             try:
                 if method == 'GET':
-                    async with self.session.get(url, headers=headers, allow_redirects=self.config['scanning']['follow_redirects']) as resp:
-                        return resp
+                    # FIXED: avoid returning a response from inside async context manager
+                    resp = await self.session.get(
+                        url,
+                        headers=headers,
+                        allow_redirects=self.config['scanning']['follow_redirects']
+                    )
+                    return resp
                 else:
-                    async with self.session.request(method, url, data=data, headers=headers) as resp:
-                        return resp
+                    resp = await self.session.request(method, url, data=data, headers=headers)
+                    return resp
                         
             except aiohttp.ClientResponseError as e:
                 if e.status == 429:
@@ -188,6 +266,12 @@ class UnifiedVulnerabilityScanner:
                     raise
             except (aiohttp.ClientOSError, asyncio.TimeoutError):
                 if attempt == max_retries - 1:
+                    return None
+                await asyncio.sleep(1)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"[ERROR] fetch_with_retry failed for {url}: {e}")
+                    self.stats['errors'] += 1
                     return None
                 await asyncio.sleep(1)
 
@@ -211,10 +295,13 @@ class UnifiedVulnerabilityScanner:
             # Step 2: Intelligence analysis
             print("[*] Running intelligence analysis...")
             intelligent_endpoints = []
-            for endpoint in all_endpoints:
+            total_endpoints = len(all_endpoints)
+            for idx, endpoint in enumerate(all_endpoints, 1):
                 analyzed = await self.analyze_endpoint_intelligence(endpoint)
                 if analyzed:
                     intelligent_endpoints.append(analyzed)
+                if idx % 50 == 0 or idx == total_endpoints:
+                    print(f"    [PROGRESS] Intelligence analyzed {idx}/{total_endpoints}")
             
             if not intelligent_endpoints:
                 print("[!] No endpoints could be analyzed. Exiting.")
@@ -259,9 +346,15 @@ class UnifiedVulnerabilityScanner:
             
             async def bounded_scan(endpoint_info):
                 async with sem:
-                    await self.scan_endpoint(endpoint_info)
+                    try:
+                        await self.scan_endpoint(endpoint_info)
+                    except Exception as e:
+                        # FIXED: isolate endpoint failures so one task does not abort all scans
+                        print(f"[ERROR] scan_endpoint failed for {endpoint_info.get('url', 'unknown')}: {e}")
+                        self.stats['errors'] += 1
             
-            await asyncio.gather(*[bounded_scan(ep) for ep in prioritized])
+            # FIXED: continue remaining tasks even if some endpoint scans fail
+            await asyncio.gather(*[bounded_scan(ep) for ep in prioritized], return_exceptions=True)
             
             # Step 6: Cross-endpoint chains
             print("\n[*] Analyzing cross-endpoint attack chains...")
@@ -275,8 +368,21 @@ class UnifiedVulnerabilityScanner:
             
         finally:
             await self.session.close()
-            self.save_csv()
-            self.save_json()  # NEW: JSON export
+            try:
+                self.save_csv()
+            except Exception as e:
+                print(f"[ERROR] save_csv failed: {e}")
+                self.stats['errors'] += 1
+            try:
+                self.save_json()  # NEW: JSON export
+            except Exception as e:
+                print(f"[ERROR] save_json failed: {e}")
+                self.stats['errors'] += 1
+            try:
+                self.save_training_dataset()
+            except Exception as e:
+                print(f"[ERROR] save_training_dataset failed: {e}")
+                self.stats['errors'] += 1
             self.print_stats()
 
     async def discover_endpoints(self, base_url: str) -> List[str]:
@@ -292,6 +398,7 @@ class UnifiedVulnerabilityScanner:
             next_queue = []
             
             for current_url in queue:
+                resp = None
                 try:
                     resp = await self.fetch_with_retry(current_url)
                     if not resp:
@@ -310,12 +417,20 @@ class UnifiedVulnerabilityScanner:
                                 
                                 if parsed_full.netloc == parsed_base.netloc:
                                     full_url = full_url.split('#')[0]
+                                    # FIXED: avoid polluting endpoint pool with static/binary files
+                                    if self._is_static_asset(full_url):
+                                        continue
                                     if full_url not in visited and len(visited) < self.config['targets'].get('max_urls', 100):
                                         visited.add(full_url)
                                         endpoints.append(full_url)
                                         next_queue.append(full_url)
                 except Exception as e:
+                    print(f"[ERROR] discover_endpoints failed on {current_url}: {e}")
+                    self.stats['errors'] += 1
                     continue
+                finally:
+                    if resp is not None:
+                        resp.release()
             
             queue = next_queue
         
@@ -332,12 +447,22 @@ class UnifiedVulnerabilityScanner:
             'auth_required': False
         }
         
+        resp = None
         try:
             resp = await self.fetch_with_retry(endpoint_url, max_retries=2)
             if not resp:
                 return endpoint_info
             
-            text = await resp.text() if resp.status < 400 else ""
+            content_type = (resp.headers.get('Content-Type') or '').lower()
+            is_text_like = any(
+                t in content_type for t in
+                ('text/', 'json', 'xml', 'javascript', 'x-www-form-urlencoded')
+            )
+
+            # FIXED: never try utf-8 decoding for binary content (png/pdf/etc.)
+            text = ""
+            if resp.status < 400 and is_text_like:
+                text = await resp.text(errors='ignore')
             
             # Module 8: Analyze endpoint
             analysis = self.endpoint_intelligence.analyze_endpoint(endpoint_url, 'GET', dict(resp.headers))
@@ -373,7 +498,12 @@ class UnifiedVulnerabilityScanner:
             return endpoint_info
             
         except Exception as e:
+            print(f"[ERROR] analyze_endpoint_intelligence failed on {endpoint_url}: {e}")
+            self.stats['errors'] += 1
             return endpoint_info
+        finally:
+            if resp is not None:
+                resp.release()
 
     def _calculate_entropy(self, text: str) -> float:
         """Calculate Shannon entropy"""
@@ -442,7 +572,7 @@ class UnifiedVulnerabilityScanner:
         ]
         
         text_lower = response_text.lower()
-        headers_lower = {k.lower(): v.lower() for k, v in response_headers.items()}
+        headers_lower = {str(k).lower(): str(v).lower() for k, v in response_headers.items()}
         
         server_header = headers_lower.get('server', '')
         if any(sig in server_header for sig in waf_signatures):
@@ -452,6 +582,70 @@ class UnifiedVulnerabilityScanner:
             return True
         
         return False
+
+    def _extract_payload_features(self, payload: str) -> Dict[str, Any]:
+        """Derive numeric payload features for tabular dataset quality."""
+        payload = payload or ""
+        payload_lower = payload.lower()
+        xss_tokens = ['<script', 'javascript:', 'onerror=', 'onload=', '<svg', 'alert(']
+        encoded_pairs = re.findall(r'%[0-9a-fA-F]{2}', payload)
+        return {
+            'payload_length': len(payload),
+            'has_script_tag': int('<script' in payload_lower),
+            'has_special_chars': int(bool(re.search(r"[<>'\"`;|&$(){}\\[\\]]", payload))),
+            'num_encoded_chars': len(encoded_pairs),
+            'is_url_encoded': int('%' in payload),
+            'keyword_xss_score': sum(1 for token in xss_tokens if token in payload_lower),
+        }
+
+    def _build_export_rows(self) -> List[Dict[str, Any]]:
+        """Build deterministic export rows using canonical DATASET_COLUMNS."""
+        rows: List[Dict[str, Any]] = []
+        for result in self.results:
+            sanitized = {k: v for k, v in result.items() if k not in self.EXPORT_EXCLUDE_COLUMNS}
+            row = {col: sanitized.get(col, '') for col in self.DATASET_COLUMNS}
+            rows.append(row)
+        return rows
+
+    def _finalize_record_for_dataset(self, record: Dict) -> Dict:
+        """Normalize labels and mark unusable rows to keep dataset clean."""
+        normalized = dict(record)
+        label = int(normalized.get('label', 0))
+        normalized['label'] = label
+        normalized['is_vulnerable'] = bool(label)
+
+        request_failed = bool(normalized.get('request_failed', False))
+        anomaly_score = float(normalized.get('anomaly_score', 0) or 0)
+        has_contradictory_evidence = any([
+            bool(normalized.get('error_detected', False)),
+            bool(normalized.get('payload_reflected', False)),
+            int(normalized.get('strong_signals', 0) or 0) > 0,
+        ])
+
+        if request_failed:
+            normalized['sample_type'] = 'request_failed'
+            normalized['exclude_from_training'] = True
+            normalized['label'] = 0
+            normalized['is_vulnerable'] = False
+        elif label == 0 and (has_contradictory_evidence or anomaly_score >= 0.40):
+            # Ambiguous negatives should not be treated as clean ground truth.
+            normalized['sample_type'] = 'ambiguous_negative'
+            normalized['exclude_from_training'] = True
+            # Remove contradiction from final labels/features.
+            normalized['error_detected'] = False
+            normalized['payload_reflected'] = False
+            normalized['strong_signals'] = 0
+            normalized['weak_signals'] = 0
+            normalized['detection_reasons'] = 'none'
+        elif label == 1:
+            normalized['sample_type'] = 'vulnerable'
+            normalized['exclude_from_training'] = False
+        else:
+            normalized['sample_type'] = 'clean'
+            normalized['exclude_from_training'] = False
+
+        normalized['label_consistent'] = int(normalized['label'] == int(bool(normalized['is_vulnerable'])))
+        return normalized
 
     async def scan_endpoint(self, endpoint_info: Dict):
         """Full scan pipeline - FIXED to save ALL results"""
@@ -485,11 +679,18 @@ class UnifiedVulnerabilityScanner:
         if baseline_resp and baseline_resp.status < 400:
             try:
                 baseline = await baseline_resp.text()
-            except:
+            except Exception as e:
+                print(f"[ERROR] baseline read failed for {url}: {e}")
+                self.stats['errors'] += 1
                 baseline = ""
+            finally:
+                baseline_resp.release()
+        elif baseline_resp is not None:
+            baseline_resp.release()
         
         attempt_count = 0
         signals_found = 0
+        endpoint_waf_blocks = 0
         max_attempts = min(20, self.config['scanning'].get('max_attempts_per_endpoint', 20))
         scan_id = hashlib.md5(f"{url}{time.time()}".encode()).hexdigest()[:12]
         
@@ -516,13 +717,37 @@ class UnifiedVulnerabilityScanner:
                     if failure_result.get('failure_occurred'):
                         # FIXED: Still save the failed attempt for ML
                         fail_record = {
+                            'scan_id': scan_id,
                             'url': url,
                             'parameter': param,
                             'payload': payload,
                             'payload_type': payload_type,
+                            'mutation_type': 'simulated_failure',
                             'label': 0,  # Not vulnerable
+                            'is_vulnerable': False,
+                            'payload_reflected': False,
+                            'error_detected': False,
+                            'similarity_to_baseline': 1.0,
+                            'anomaly_score': 0.0,
+                            'time_anomaly': False,
+                            'status_code': 0,
+                            'response_time': 0.0,
+                            'response_length': 0,
+                            'response_size': 0,
+                            'entropy': 0.0,
+                            'waf_detected': False,
+                            'has_auth': endpoint_info.get('auth_required', False),
+                            'endpoint_type': endpoint_info.get('endpoint_type', 'unknown'),
+                            'risk_score': endpoint_info.get('risk_score', 0),
+                            'priority_score': endpoint_info.get('priority_score', 0),
+                            'attack_rank': endpoint_info.get('attack_rank', 0),
+                            'strategy_name': strategy_name,
+                            'attempt_count': attempt_count,
                             'failure_simulated': True,
                             'failure_mode': failure_result.get('failure_mode'),
+                            'chain_depth': 0,
+                            'chain_success': False,
+                            'execution_signals': 'failure_simulated',
                             'timestamp': datetime.now().isoformat()
                         }
                         self.results.append(fail_record)
@@ -544,7 +769,8 @@ class UnifiedVulnerabilityScanner:
                         if selected_payloads and payload_idx == 0:
                             payload = selected_payloads[0].get('payload', payload)
                     except Exception as e:
-                        pass
+                        print(f"[ERROR] smart_payload_selector failed: {e}")
+                        self.stats['errors'] += 1
                     
                     # Module 13: Payload mutation
                     try:
@@ -630,13 +856,16 @@ class UnifiedVulnerabilityScanner:
                             signals_found += 1
                             self.stats['vulns'] += 1
                             print(f"  [!] VULNERABLE: {payload_type} on {param} (anomaly: {result.get('anomaly_score', 0):.2f})")
+                        if result.get('waf_detected'):
+                            endpoint_waf_blocks += 1
                     
                     # Module 6: Stop condition
                     should_stop, reason, analysis = self.stop_condition_evaluator.should_stop_attacking(
                         url, 
                         attempt_count, 
                         signals_found,
-                        waf_blocks=self.stats['waf_triggers'],
+                        # FIXED: evaluate WAF stop condition per endpoint, not globally
+                        waf_blocks=endpoint_waf_blocks,
                         response_codes=[result.get('status_code', 200)] if result else []
                     )
                     
@@ -662,12 +891,14 @@ class UnifiedVulnerabilityScanner:
                 if impact.get('bounty_worthy'):
                     print(f"    [IMPACT] Bounty-worthy: {impact.get('severity', 'unknown')}")
             except Exception as e:
-                pass
+                print(f"[ERROR] impact simulation failed on {url}: {e}")
+                self.stats['errors'] += 1
 
     async def test_payload(self, url: str, param: str, payload: str, 
                           payload_type: str, baseline: Optional[str],
                           endpoint_info: Dict, mutation_type: str) -> Optional[Dict]:
         """Test single payload with ENHANCED detection"""
+        resp = None
         try:
             # Construct request
             parsed = urlparse(url)
@@ -680,50 +911,127 @@ class UnifiedVulnerabilityScanner:
             resp = await self.fetch_with_retry(test_url, max_retries=2)
             
             if not resp:
-                return None
+                # ADDED: keep failed requests as negative samples for balanced ML datasets
+                self.stats['requests'] += 1
+                return self._finalize_record_for_dataset({
+                    'url': url,
+                    'parameter': param,
+                    'payload': payload,
+                    'payload_type': payload_type,
+                    **self._extract_payload_features(payload),
+                    'mutation_type': mutation_type,
+                    'label': 0,
+                    'is_vulnerable': False,
+                    'payload_reflected': False,
+                    'error_detected': False,
+                    'similarity_to_baseline': 1.0,
+                    'anomaly_score': 0.0,
+                    'time_anomaly': False,
+                    'status_code': 0,
+                    'response_time': 0.0,
+                    'response_length': 0,
+                    'response_size': 0,
+                    'entropy': 0.0,
+                    'waf_detected': False,
+                    'detection_reasons': 'request_failed',
+                    'strong_signals': 0,
+                    'weak_signals': 0,
+                    'has_auth': endpoint_info.get('auth_required', False),
+                    'endpoint_type': endpoint_info.get('endpoint_type', 'unknown'),
+                    'risk_score': endpoint_info.get('risk_score', 0),
+                    'request_failed': True,
+                    'timestamp': datetime.now().isoformat(),
+                })
             
-            response_text = await resp.text()
+            # FIXED: tolerate mixed/broken encodings from target responses
+            response_text = await resp.text(errors='ignore')
             elapsed = time.time() - start
             
             self.stats['requests'] += 1
             
-            # FIXED: Enhanced detection logic
-            is_vulnerable = False
+            # IMPROVED: conservative multi-signal detection to reduce false positives
             error_detected = False
-            payload_reflected = payload in response_text
-            
-            # 1. Reflection-based detection
-            if payload_reflected:
-                is_vulnerable = True
-            
-            # 2. Error pattern detection (all patterns, not just payload_type)
-            patterns = self.config['detection']['error_patterns']
-            for ptype, pattern in patterns.items():
-                if re.search(pattern, response_text, re.IGNORECASE):
-                    is_vulnerable = True
-                    error_detected = True
+            detection_reasons: List[str] = []
+
+            response_lower = response_text.lower()
+            payload_candidates = [payload, unquote(payload)]
+            payload_reflected = False
+            for candidate in payload_candidates:
+                candidate = (candidate or "").strip()
+                if len(candidate) < 4:
+                    continue
+                if candidate.lower() in response_lower:
+                    payload_reflected = True
+                    detection_reasons.append("payload_reflection")
                     break
-            
-            # 3. Similarity anomaly detection
+
+            # 1) Pattern matching: prefer payload-type-specific pattern first
+            patterns = self.config.get('detection', {}).get('error_patterns', {})
+            pattern_key_map = {
+                'path_traversal': 'path'
+            }
+            selected_pattern_key = pattern_key_map.get(payload_type, payload_type)
+            selected_pattern = patterns.get(selected_pattern_key)
+            if selected_pattern:
+                try:
+                    if re.search(selected_pattern, response_text, re.IGNORECASE):
+                        error_detected = True
+                        detection_reasons.append(f"error_pattern:{selected_pattern_key}")
+                except re.error as regex_error:
+                    print(f"[ERROR] invalid regex for {selected_pattern_key}: {regex_error}")
+                    self.stats['errors'] += 1
+
+            # 2) Similarity anomaly is weak signal unless supported
             similarity = self._jaccard_similarity(baseline, response_text) if baseline else 0.5
-            if similarity < 0.7:  # Response changed significantly
-                is_vulnerable = True
-            
-            # 4. Time-based detection
+            similarity_anomaly = similarity < 0.45
+            if similarity_anomaly:
+                detection_reasons.append("similarity_anomaly")
+
+            # 3) Time anomaly
             time_anomaly = elapsed > self.config['detection']['slow_threshold']
             if time_anomaly:
-                is_vulnerable = True
-            
-            # 5. Status code anomaly
-            status_anomaly = resp.status >= 500 or resp.status in [403, 406]
-            if status_anomaly:
-                is_vulnerable = True
-            
-            # 6. WAF detection
+                detection_reasons.append("time_anomaly")
+
+            # 4) Status anomalies
+            status_server_error = resp.status >= 500
+            status_waf_like = resp.status in [403, 406, 429]
+            if status_server_error:
+                detection_reasons.append("status_5xx")
+            elif status_waf_like:
+                detection_reasons.append("status_waf_like")
+
+            # 5) WAF detection (informative, not direct vulnerability evidence)
             waf_detected = self._detect_waf_heuristic(response_text, dict(resp.headers))
             if waf_detected:
                 self.stats['waf_triggers'] += 1
-            
+                detection_reasons.append("waf_detected")
+
+            strong_signals = 0
+            weak_signals = 0
+            if payload_reflected:
+                strong_signals += 1
+            if error_detected:
+                strong_signals += 1
+            if status_server_error:
+                strong_signals += 1
+            if time_anomaly and payload_type in {'sqli', 'command', 'nosql'}:
+                strong_signals += 1
+            elif time_anomaly:
+                weak_signals += 1
+            if similarity_anomaly:
+                weak_signals += 1
+            if status_waf_like:
+                weak_signals += 1
+            if waf_detected:
+                weak_signals += 1
+
+            # Final vulnerability decision (conservative)
+            is_vulnerable = (
+                strong_signals >= 2
+                or (strong_signals >= 1 and weak_signals >= 1 and not (waf_detected and status_waf_like))
+                or (payload_type == 'xss' and payload_reflected)
+            )
+
             # FIXED: Calculate proper anomaly_score
             anomaly_score = self._calculate_anomaly_score(
                 similarity, time_anomaly, error_detected, 
@@ -736,6 +1044,7 @@ class UnifiedVulnerabilityScanner:
                 'parameter': param,
                 'payload': payload,
                 'payload_type': payload_type,
+                **self._extract_payload_features(payload),
                 'mutation_type': mutation_type,
                 'label': 1 if is_vulnerable else 0,  # EXPLICIT LABEL
                 'is_vulnerable': is_vulnerable,
@@ -746,20 +1055,59 @@ class UnifiedVulnerabilityScanner:
                 'time_anomaly': time_anomaly,
                 'status_code': resp.status,
                 'response_time': round(elapsed, 3),
-                'response_size': len(response_text),
+                'response_length': len(response_text),  # FIXED: required dataset field name
+                'response_size': len(response_text),    # Keep legacy key for compatibility
                 'entropy': round(self._calculate_entropy(response_text), 3),
                 'waf_detected': waf_detected,
+                'detection_reasons': '|'.join(detection_reasons) if detection_reasons else 'none',
+                'strong_signals': strong_signals,
+                'weak_signals': weak_signals,
                 'has_auth': endpoint_info.get('auth_required', False),
                 'endpoint_type': endpoint_info.get('endpoint_type', 'unknown'),
                 'risk_score': endpoint_info.get('risk_score', 0),
+                'request_failed': False,
                 'timestamp': datetime.now().isoformat(),
             }
             
-            return result
+            return self._finalize_record_for_dataset(result)
             
         except Exception as e:
+            print(f"[ERROR] test_payload failed ({url}, {param}, {payload_type}): {e}")
             self.stats['errors'] += 1
-            return None
+            self.stats['requests'] += 1
+            # ADDED: preserve failed execution as negative row instead of dropping it
+            return self._finalize_record_for_dataset({
+                'url': url,
+                'parameter': param,
+                'payload': payload,
+                'payload_type': payload_type,
+                **self._extract_payload_features(payload),
+                'mutation_type': mutation_type,
+                'label': 0,
+                'is_vulnerable': False,
+                'payload_reflected': False,
+                'error_detected': False,
+                'similarity_to_baseline': 1.0,
+                'anomaly_score': 0.0,
+                'time_anomaly': False,
+                'status_code': 0,
+                'response_time': 0.0,
+                'response_length': 0,
+                'response_size': 0,
+                'entropy': 0.0,
+                'waf_detected': False,
+                'detection_reasons': 'exception',
+                'strong_signals': 0,
+                'weak_signals': 0,
+                'has_auth': endpoint_info.get('auth_required', False),
+                'endpoint_type': endpoint_info.get('endpoint_type', 'unknown'),
+                'risk_score': endpoint_info.get('risk_score', 0),
+                'request_failed': True,
+                'timestamp': datetime.now().isoformat(),
+            })
+        finally:
+            if resp is not None:
+                resp.release()
 
     def save_csv(self):
         """Save results to CSV"""
@@ -768,26 +1116,28 @@ class UnifiedVulnerabilityScanner:
             return
         
         output_file = self.config['output']['csv_file']
-        
-        # Ensure all records have same fields
-        all_keys = set()
-        for result in self.results:
-            all_keys.update(result.keys())
-        
-        # Add missing keys with defaults
-        final_results = []
-        for result in self.results:
-            record = {}
-            for key in all_keys:
-                record[key] = result.get(key, '')
-            final_results.append(record)
+        final_results = self._build_export_rows()
         
         if final_results:
-            fieldnames = sorted(list(final_results[0].keys()))
-            with open(output_file, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(final_results)
+            # FIXED: strict deterministic header order
+            fieldnames = list(self.DATASET_COLUMNS)
+            try:
+                with open(output_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(final_results)
+            except PermissionError:
+                # FIXED: if file is locked/open by another process, save to fallback file
+                base, ext = os.path.splitext(output_file)
+                fallback_file = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+                print(f"[WARN] Cannot write {output_file} (locked). Saving to {fallback_file}")
+                with open(fallback_file, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(final_results)
+                # Keep config aligned for JSON output path in same run
+                self.config['output']['csv_file'] = fallback_file
+                output_file = fallback_file
             
             print(f"[OK] Saved {len(final_results)} records to {output_file}")
 
@@ -806,18 +1156,135 @@ class UnifiedVulnerabilityScanner:
                 'total_records': len(self.results),
                 'vulnerable_count': sum(1 for r in self.results if r.get('label') == 1),
                 'clean_count': sum(1 for r in self.results if r.get('label') == 0),
+                'excluded_from_training': sum(1 for r in self.results if r.get('exclude_from_training')),
+                'usable_for_training': sum(1 for r in self.results if not r.get('exclude_from_training')),
                 'configuration': {
                     'targets': self.config['targets']['urls'],
                     'payload_types': list(self.config['payloads'].keys())
                 }
             },
-            'records': self.results
+            # FIXED: JSON uses same canonical rows as CSV
+            'records': self._build_export_rows()
         }
         
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, indent=2, default=str)
+        try:
+            with open(json_file, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, default=str)
+        except PermissionError:
+            # FIXED: fallback JSON filename when lock/permission blocks write
+            base, ext = os.path.splitext(json_file)
+            fallback_json = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+            print(f"[WARN] Cannot write {json_file} (locked). Saving to {fallback_json}")
+            with open(fallback_json, 'w', encoding='utf-8') as f:
+                json.dump(export_data, f, indent=2, default=str)
+            json_file = fallback_json
         
         print(f"[OK] Saved JSON export to {json_file}")
+
+    def save_training_dataset(self):
+        """ADDED: save strict training-ready dataset (filtered + de-leaked)."""
+        if not self.results:
+            return
+
+        candidate_rows = []
+        for row in self.results:
+            # Exclude ambiguous and request/network failure rows from training.
+            if row.get('exclude_from_training'):
+                continue
+            if row.get('request_failed'):
+                continue
+            if int(row.get('status_code', 0) or 0) == 0:
+                continue
+
+            cleaned = {
+                k: v for k, v in row.items()
+                if k not in self.EXPORT_EXCLUDE_COLUMNS and k not in self.TRAINING_EXCLUDE_COLUMNS
+            }
+
+            # Use one canonical target only.
+            cleaned['is_vulnerable'] = int(bool(cleaned.get('is_vulnerable', 0)))
+            cleaned.pop('label', None)
+
+            # Convert timestamp to safe tabular features and drop raw timestamp.
+            ts_raw = cleaned.get('timestamp')
+            hour_of_day = -1
+            day_of_week = -1
+            if ts_raw:
+                try:
+                    ts_obj = datetime.fromisoformat(str(ts_raw))
+                    hour_of_day = ts_obj.hour
+                    day_of_week = ts_obj.weekday()
+                except Exception:
+                    pass
+            cleaned['hour_of_day'] = hour_of_day
+            cleaned['day_of_week'] = day_of_week
+            cleaned.pop('timestamp', None)
+
+            candidate_rows.append(cleaned)
+
+        if not candidate_rows:
+            print("[WARN] No usable rows for training dataset export")
+            return
+
+        # Encode categorical strategy/context fields for tree models.
+        categorical_cols = ['mutation_type', 'strategy_name', 'endpoint_type', 'payload_type', 'parameter']
+        category_maps: Dict[str, Dict[str, int]] = {}
+        for col in categorical_cols:
+            values = sorted({str(r.get(col, 'unknown')) for r in candidate_rows})
+            category_maps[col] = {val: idx for idx, val in enumerate(values)}
+
+        train_rows = []
+        for row in candidate_rows:
+            encoded_row = dict(row)
+            for col in categorical_cols:
+                key = str(encoded_row.get(col, 'unknown'))
+                encoded_row[f'{col}_encoded'] = category_maps[col].get(key, -1)
+            train_rows.append(encoded_row)
+
+        train_csv = "data/ai_training_dataset_train.csv"
+        train_json = "data/ai_training_dataset_train.json"
+        os.makedirs(os.path.dirname(train_csv), exist_ok=True)
+
+        # Stable field order based on DATASET_COLUMNS then extras
+        train_keys = set()
+        for row in train_rows:
+            train_keys.update(row.keys())
+        preferred = [
+            c for c in self.DATASET_COLUMNS
+            if c in train_keys and c not in self.TRAINING_EXCLUDE_COLUMNS
+        ]
+        extras = sorted([k for k in train_keys if k not in preferred])
+        fieldnames = preferred + extras
+
+        with open(train_csv, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows([{k: r.get(k, '') for k in fieldnames} for r in train_rows])
+
+        with open(train_json, 'w', encoding='utf-8') as f:
+            json.dump(
+                {
+                    'metadata': {
+                        'generated_at': datetime.now().isoformat(),
+                        'total_records': len(train_rows),
+                        'positive': sum(1 for r in train_rows if r.get('is_vulnerable') == 1),
+                        'negative': sum(1 for r in train_rows if r.get('is_vulnerable') == 0),
+                        'excluded_rule_fields': sorted(list(self.TRAINING_EXCLUDE_COLUMNS)),
+                        'categorical_encoding': category_maps,
+                    },
+                    'records': train_rows,
+                },
+                f,
+                indent=2,
+                default=str,
+            )
+
+        print(f"[OK] Saved training CSV to {train_csv}")
+        print(f"[OK] Saved training JSON to {train_json}")
+        positive = sum(1 for r in train_rows if r.get('is_vulnerable') == 1)
+        negative = sum(1 for r in train_rows if r.get('is_vulnerable') == 0)
+        if positive == 0 or negative == 0:
+            print("[WARN] Training dataset has a single class. Add more diverse scans before model training.")
 
     def print_stats(self):
         """Print completion statistics"""
@@ -884,6 +1351,7 @@ def main():
         print("\n[!] Scan interrupted by user")
         scanner.save_csv()
         scanner.save_json()
+        scanner.save_training_dataset()
         sys.exit(1)
     except Exception as e:
         print(f"\n[ERROR] Scan failed: {e}")
