@@ -1,0 +1,20 @@
+FEATURES = [
+    'url_length', 'path_length', 'query_string_length', 'payload_length',
+    'special_char_count', 'digit_count', 'uppercase_count', 'lowercase_count',
+    'dot_count', 'slash_count', 'percent_encoding_count', 'null_byte_count',
+    'path_depth', 'query_param_count', 'has_ip_in_url', 'is_https',
+    'payload_entropy', 'special_char_ratio', 'digit_ratio',
+    'sql_keyword_count', 'sql_comment_sequence_count', 'sql_boolean_logic_count',
+    'nosql_operator_count', 'command_injection_count',
+    'xss_keyword_count', 'xss_event_handler_count', 'xss_context_break_count',
+    'path_traversal_sequence_count', 'path_traversal_depth', 'lfi_wrapper_usage',
+    'ssrf_indicator_count', 'open_redirect_param_count',
+    'has_user_agent', 'user_agent_length', 'user_agent_known_bot',
+    'header_order_anomaly', 'has_cookie', 'cookie_count',
+    'has_referer', 'has_origin', 'has_authorization',
+    'has_content_security_policy', 'has_strict_transport_security', 'has_x_frame_options',
+    'status_code', 'response_length', 'response_time',
+    'contains_error', 'is_redirect', 'response_entropy',
+    'secure_cookie_present', 'httponly_cookie_present', 'server_header_present',
+    'missing_security_headers_count', 'request_anomaly_score'
+]

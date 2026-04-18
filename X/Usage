@@ -1,0 +1,27 @@
+# Default targets
+python main.py
+
+# Single target
+python main.py -t http://localhost:3000
+
+# Multiple targets
+python main.py -t http://app1.com -t http://app2.com -t http://app3.com
+
+# From file
+python main.py -f data/target_urls.txt
+
+# Custom size and output
+python main.py -t http://localhost:8080 -s 5000 -o ./data/my_dataset.csv
+
+======================================================
+
+# Create directory structure first
+mkdir -p web-attack-detector/{config,engines,generators,data/raw}
+
+# Copy all files to their locations
+# Then run:
+cd web-attack-detector
+python main.py -v
+
+# Or with custom target
+python main.py -t http://localhost:3000 -s 1000
